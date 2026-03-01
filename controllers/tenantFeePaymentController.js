@@ -23,7 +23,8 @@ export const getClassFeeStatus = async (req, res, next) => {
 
     // Get all students in the class
     const students = await Student.find({ classId, isActive: true })
-      .select('fullName rollNumber monthlyFee feeDueDate')
+      .select('fullName rollNumber monthlyFee feeDueDate classId')
+      .populate('classId', 'className section')
       .sort({ rollNumber: 1 });
 
     // Get fee payment records for these students for the selected month/year
@@ -40,23 +41,56 @@ export const getClassFeeStatus = async (req, res, next) => {
       feePaymentMap[payment.studentId.toString()] = payment;
     });
 
+    // Get previous month's unpaid balances
+    const previousMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
+    const previousYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+
+    const previousMonthPayments = await FeePayment.find({
+      studentId: { $in: studentIds },
+      month: previousMonth,
+      year: previousYear
+    });
+
+    // Create map of previous month's remaining amounts
+    const previousRemainingMap = {};
+    previousMonthPayments.forEach(payment => {
+      if (payment.remainingAmount > 0) {
+        previousRemainingMap[payment.studentId.toString()] = payment.remainingAmount;
+      }
+    });
+
     // Combine student data with fee payment status
     const studentsWithFeeStatus = students.map(student => {
       const payment = feePaymentMap[student._id.toString()];
+      const previousRemaining = previousRemainingMap[student._id.toString()] || 0;
+
+      // Calculate total due for current month
+      const currentMonthFee = student.monthlyFee;
+      const totalDue = currentMonthFee + previousRemaining;
 
       return {
         _id: student._id,
         fullName: student.fullName,
         rollNumber: student.rollNumber,
-        monthlyFee: student.monthlyFee,
+        monthlyFee: currentMonthFee,
+        previousMonthDues: previousRemaining,
+        totalDue: totalDue,
         feeDueDate: student.feeDueDate,
+        classId: student.classId, // Include populated classId
         status: payment ? payment.status : 'Pending',
         paymentDate: payment ? payment.paymentDate : null,
         paymentId: payment ? payment._id : null,
+        // Partial payment fields
+        amountPaid: payment ? (payment.amountPaid || 0) : 0,
+        // IMPORTANT: Preserve 0 values for remainingAmount
+        remainingAmount: payment ? (payment.remainingAmount !== undefined ? payment.remainingAmount : totalDue) : totalDue,
+        partialPayments: payment ? payment.partialPayments || [] : [],
         // FBR fields (additive - won't break existing functionality)
         isFbrReported: payment ? payment.isFbrReported : false,
         fbrInvoiceNumber: payment?.fbrData?.invoiceNumber || null,
-        fbrStatus: payment?.fbrData?.responseStatus || null
+        fbrStatus: payment?.fbrData?.responseStatus || null,
+        invoiceCreated: payment?.invoiceCreated || false,
+        invoiceNumber: payment?.invoiceNumber || null
       };
     });
 
@@ -88,7 +122,7 @@ export const markFeePayment = async (req, res, next) => {
       });
     }
 
-    const { studentId, classId, month, year, status, remarks } = req.body;
+    const { studentId, classId, month, year, status, remarks, amount: paymentAmount } = req.body;
 
     const Student = await getModel(req.schoolId, 'students');
     const FeePayment = await getModel(req.schoolId, 'feepayments');
@@ -101,6 +135,19 @@ export const markFeePayment = async (req, res, next) => {
         message: 'Student not found'
       });
     }
+
+    // Get previous month's remaining balance
+    const previousMonth = month === 1 ? 12 : month - 1;
+    const previousYear = month === 1 ? year - 1 : year;
+
+    const previousMonthPayment = await FeePayment.findOne({
+      studentId,
+      month: previousMonth,
+      year: previousYear
+    });
+
+    const previousRemaining = previousMonthPayment?.remainingAmount || 0;
+    const totalDue = student.monthlyFee + previousRemaining;
 
     // Helper function to generate local invoice number
     const generateInvoiceNumber = async () => {
@@ -127,26 +174,92 @@ export const markFeePayment = async (req, res, next) => {
     });
 
     if (feePayment) {
-      // Update existing record
-      console.log(`🔄 Updating existing fee payment ID: ${feePayment._id} to status: ${status}`);
+      // Update existing record with partial payment
+      console.log(`🔄 Updating existing fee payment ID: ${feePayment._id}`);
 
-      feePayment.status = status;
-      feePayment.paymentDate = status === 'Paid' ? new Date() : null;
+      // Add to partial payments array if payment amount is provided
+      if (paymentAmount && paymentAmount > 0) {
+        feePayment.partialPayments.push({
+          amount: paymentAmount,
+          paymentDate: new Date(),
+          remarks,
+          markedBy: req.admin._id
+        });
+
+        // Update amountPaid
+        feePayment.amountPaid = (feePayment.amountPaid || 0) + paymentAmount;
+
+        // Calculate remaining amount (against totalDue)
+        feePayment.remainingAmount = totalDue - feePayment.amountPaid;
+
+        // Auto-determine status based on remaining amount
+        if (feePayment.remainingAmount <= 0) {
+          feePayment.status = 'Paid';
+          feePayment.paymentDate = new Date();
+        } else if (feePayment.amountPaid > 0) {
+          feePayment.status = 'Partial';
+        } else {
+          feePayment.status = 'Pending';
+        }
+      } else {
+        // Manual status change without payment amount
+        feePayment.status = status;
+        feePayment.paymentDate = status === 'Paid' ? new Date() : null;
+
+        // IMPORTANT FIX: If manually marking as "Paid", set amountPaid to totalDue
+        if (status === 'Paid') {
+          feePayment.amountPaid = totalDue;
+          feePayment.remainingAmount = 0;
+        } else if (status === 'Pending') {
+          feePayment.amountPaid = 0;
+          feePayment.remainingAmount = totalDue;
+        }
+        // For 'Partial' status without amount, keep existing amountPaid
+      }
+
       feePayment.markedBy = req.admin._id;
       feePayment.remarks = remarks || feePayment.remarks;
 
       // Generate invoice number if marking as paid and no invoice exists
-      if (status === 'Paid' && !feePayment.invoiceNumber) {
+      if (feePayment.status === 'Paid' && !feePayment.invoiceNumber) {
         feePayment.invoiceNumber = await generateInvoiceNumber();
       }
 
       await feePayment.save();
-      console.log(`✅ Fee payment updated successfully - Status: ${feePayment.status}, ID: ${feePayment._id}`);
+      console.log(`✅ Fee payment updated - Status: ${feePayment.status}, Paid: Rs ${feePayment.amountPaid}, Remaining: Rs ${feePayment.remainingAmount}`);
     } else {
       // Create new record
       console.log(`📝 Creating new fee payment record for student ${studentId}`);
 
-      const invoiceNumber = status === 'Paid' ? await generateInvoiceNumber() : null;
+      // Determine amountPaid based on payment amount or status
+      let amountPaid = 0;
+      if (paymentAmount && paymentAmount > 0) {
+        amountPaid = paymentAmount;
+      } else if (status === 'Paid') {
+        // IMPORTANT FIX: If manually marking as "Paid" without amount, use totalDue
+        amountPaid = totalDue;
+      }
+
+      const remainingAmount = totalDue - amountPaid;
+
+      // Auto-determine status if payment amount provided
+      let finalStatus = status;
+      if (paymentAmount && paymentAmount > 0) {
+        if (remainingAmount <= 0) {
+          finalStatus = 'Paid';
+        } else if (amountPaid > 0) {
+          finalStatus = 'Partial';
+        }
+      }
+
+      const invoiceNumber = finalStatus === 'Paid' ? await generateInvoiceNumber() : null;
+
+      const partialPayments = (paymentAmount && paymentAmount > 0) ? [{
+        amount: paymentAmount,
+        paymentDate: new Date(),
+        remarks,
+        markedBy: req.admin._id
+      }] : [];
 
       feePayment = await FeePayment.create({
         schoolId: req.schoolId,
@@ -154,21 +267,24 @@ export const markFeePayment = async (req, res, next) => {
         classId,
         month,
         year,
-        amount: student.monthlyFee,
-        status,
-        paymentDate: status === 'Paid' ? new Date() : null,
+        amount: totalDue, // Store total due (current month + previous dues)
+        amountPaid,
+        remainingAmount,
+        partialPayments,
+        status: finalStatus,
+        paymentDate: finalStatus === 'Paid' ? new Date() : null,
         markedBy: req.admin._id,
         remarks,
         invoiceNumber
       });
 
-      console.log(`✅ Fee payment created successfully - Status: ${feePayment.status}, ID: ${feePayment._id}`);
+      console.log(`✅ Fee payment created - Status: ${feePayment.status}, Paid: Rs ${feePayment.amountPaid}, Remaining: Rs ${feePayment.remainingAmount}`);
     }
 
     // STEP 2: Conditional FBR Integration (Only if status is 'Paid')
     let fbrResult = null;
 
-    if (status === 'Paid') {
+    if (feePayment.status === 'Paid') {
       // Get school FBR configuration
       const school = await School.findById(req.schoolId).select('fbrEnabled fbrConfig schoolName');
 
@@ -247,7 +363,7 @@ export const markFeePayment = async (req, res, next) => {
     // Prepare response
     const response = {
       success: true,
-      message: `Fee status marked as ${status}`,
+      message: `Fee status marked as ${feePayment.status}`,
       data: feePayment
     };
 
@@ -378,7 +494,7 @@ export const getFeePaymentById = async (req, res, next) => {
     const FeePayment = await getModel(req.schoolId, 'feepayments');
 
     const feePayment = await FeePayment.findById(paymentId)
-      .populate('studentId', 'fullName rollNumber guardianName guardianPhone')
+      .populate('studentId', 'fullName rollNumber guardianName guardianPhone parentName parentPhone monthlyFee')
       .populate('classId', 'className section');
 
     if (!feePayment) {
@@ -387,6 +503,14 @@ export const getFeePaymentById = async (req, res, next) => {
         message: 'Fee payment record not found'
       });
     }
+
+    console.log('📄 Sending fee payment to invoice:', {
+      id: feePayment._id,
+      studentName: feePayment.studentId?.fullName,
+      monthlyFee: feePayment.studentId?.monthlyFee,
+      amountPaid: feePayment.amountPaid,
+      remainingAmount: feePayment.remainingAmount
+    });
 
     res.status(200).json({
       success: true,
@@ -420,11 +544,11 @@ export const createInvoice = async (req, res, next) => {
       });
     }
 
-    // Check if fee is paid
-    if (feePayment.status !== 'Paid') {
+    // Check if fee is paid or partially paid (amountPaid > 0)
+    if (feePayment.amountPaid <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot create invoice for unpaid fee'
+        message: 'Cannot create invoice when no payment has been made'
       });
     }
 
@@ -472,11 +596,361 @@ export const createInvoice = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Update invoice data (for editing)
+ * @route   PUT /api/admin/fees/update-invoice/:paymentId
+ * @access  Private (Admin only)
+ */
+export const updateInvoice = async (req, res, next) => {
+  try {
+    const { paymentId } = req.params;
+    const { invoiceData } = req.body;
+
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+
+    const feePayment = await FeePayment.findById(paymentId)
+      .populate('studentId', 'fullName rollNumber guardianName guardianPhone monthlyFee feeDueDate')
+      .populate('classId', 'className section');
+
+    if (!feePayment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Fee payment record not found'
+      });
+    }
+
+    // Update invoice fields
+    if (invoiceData) {
+      // Update the amount field if totalFee changed
+      if (invoiceData.totalFee !== undefined) {
+        feePayment.amount = invoiceData.totalFee;
+      }
+
+      // Update amountPaid if changed
+      if (invoiceData.amountPaid !== undefined) {
+        feePayment.amountPaid = invoiceData.amountPaid;
+      }
+
+      // Recalculate remaining amount
+      feePayment.remainingAmount = feePayment.amount - feePayment.amountPaid;
+
+      // Update status based on remaining amount
+      if (feePayment.remainingAmount <= 0) {
+        feePayment.status = 'Paid';
+        if (!feePayment.paymentDate) {
+          feePayment.paymentDate = new Date();
+        }
+      } else if (feePayment.amountPaid > 0) {
+        feePayment.status = 'Partial';
+      } else {
+        feePayment.status = 'Pending';
+      }
+
+      // Store invoice customizations in remarks or a new field
+      if (invoiceData.note !== undefined || invoiceData.additionalCharges !== undefined || invoiceData.dueDate !== undefined) {
+        const invoiceMetadata = {
+          note: invoiceData.note,
+          additionalCharges: invoiceData.additionalCharges,
+          dueDate: invoiceData.dueDate,
+          lastUpdated: new Date()
+        };
+        feePayment.remarks = feePayment.remarks
+          ? `${feePayment.remarks}\n---INVOICE_METADATA---\n${JSON.stringify(invoiceMetadata)}`
+          : `---INVOICE_METADATA---\n${JSON.stringify(invoiceMetadata)}`;
+      }
+    }
+
+    await feePayment.save();
+
+    console.log(`✅ Invoice updated: ${feePayment.invoiceNumber} for student: ${feePayment.studentId.fullName}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Invoice updated successfully',
+      data: feePayment
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get invoice history for a student (all months/years)
+ * @route   GET /api/admin/fees/invoice-history/:studentId
+ * @access  Private (Admin only)
+ */
+export const getInvoiceHistory = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+
+    console.log('📋 Fetching invoice history for student:', studentId);
+    console.log('🏫 School ID:', req.schoolId);
+
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Student = await getModel(req.schoolId, 'students');
+
+    // Verify student exists
+    const student = await Student.findById(studentId)
+      .select('fullName rollNumber monthlyFee');
+
+    if (!student) {
+      console.log('❌ Student not found:', studentId);
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    console.log('✅ Student found:', student.fullName);
+
+    // Get Class and Admin models from tenant database
+    const Class = await getModel(req.schoolId, 'classes');
+    const Admin = await getModel(req.schoolId, 'admins');
+
+    // Get all fee payment records for this student (including those with partial payments)
+    const invoices = await FeePayment.find({
+      studentId,
+      $or: [
+        { invoiceCreated: true },
+        { 'partialPayments.0': { $exists: true } }, // Has at least one payment
+        { amountPaid: { $gt: 0 } } // Has some amount paid
+      ]
+    })
+      .populate({
+        path: 'classId',
+        select: 'className section',
+        model: Class
+      })
+      .populate({
+        path: 'markedBy',
+        select: 'name email',
+        model: Admin
+      })
+      .sort({ year: -1, month: -1 });
+
+    console.log(`📊 Found ${invoices.length} payment records`);
+
+    res.status(200).json({
+      success: true,
+      student,
+      count: invoices.length,
+      data: invoices
+    });
+
+  } catch (error) {
+    console.error('❌ Error in getInvoiceHistory:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Record a payment and prepare for invoice (NEW SIMPLIFIED FLOW)
+ * @route   POST /api/admin/fees/record-payment
+ * @access  Private (Admin only)
+ */
+export const recordPayment = async (req, res, next) => {
+  try {
+    const { studentId, classId, month, year, amountPaid, remarks } = req.body;
+
+    console.log('📥 Record payment request:', {
+      studentId,
+      classId,
+      month,
+      year,
+      amountPaid,
+      remarks,
+      schoolId: req.schoolId
+    });
+
+    // Validation
+    if (!studentId || !classId || !month || !year || amountPaid === undefined) {
+      console.log('❌ Validation failed - missing fields');
+      return res.status(400).json({
+        success: false,
+        message: 'Student ID, Class ID, Month, Year, and Amount Paid are required',
+        received: { studentId, classId, month, year, amountPaid }
+      });
+    }
+
+    if (amountPaid <= 0) {
+      console.log('❌ Validation failed - invalid amount');
+      return res.status(400).json({
+        success: false,
+        message: 'Amount paid must be greater than 0',
+        received: { amountPaid }
+      });
+    }
+
+    const Student = await getModel(req.schoolId, 'students');
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+
+    // Get student details
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    // Get previous month's remaining balance
+    const previousMonth = month === 1 ? 12 : month - 1;
+    const previousYear = month === 1 ? year - 1 : year;
+
+    const previousMonthPayment = await FeePayment.findOne({
+      studentId,
+      month: previousMonth,
+      year: previousYear
+    });
+
+    const previousRemaining = previousMonthPayment?.remainingAmount || 0;
+    const totalDue = student.monthlyFee + previousRemaining;
+
+    console.log('💰 Fee Calculation:', {
+      currentMonthFee: student.monthlyFee,
+      previousMonthDues: previousRemaining,
+      totalDue: totalDue
+    });
+
+    // Check if payment record already exists for this month/year
+    console.log('🔍 Searching for existing payment:', {
+      schoolId: req.schoolId,
+      studentId,
+      month,
+      year
+    });
+
+    let feePayment = await FeePayment.findOne({
+      studentId,
+      month,
+      year
+    });
+
+    console.log('🔍 Existing payment found:', feePayment ? 'YES' : 'NO');
+    if (feePayment) {
+      console.log('📝 Existing payment details:', {
+        id: feePayment._id,
+        currentAmountPaid: feePayment.amountPaid,
+        currentStatus: feePayment.status
+      });
+    }
+
+    if (feePayment) {
+      // Update existing record - add to partial payments
+      console.log('♻️ Updating existing payment record...');
+
+      feePayment.partialPayments.push({
+        amount: amountPaid,
+        paymentDate: new Date(),
+        remarks,
+        markedBy: req.admin._id
+      });
+
+      feePayment.amountPaid = (feePayment.amountPaid || 0) + amountPaid;
+      feePayment.remainingAmount = totalDue - feePayment.amountPaid;
+
+      // Auto-determine status
+      if (feePayment.remainingAmount <= 0) {
+        feePayment.status = 'Paid';
+        feePayment.paymentDate = new Date();
+      } else if (feePayment.amountPaid > 0) {
+        feePayment.status = 'Partial';
+      } else {
+        feePayment.status = 'Pending';
+      }
+
+      feePayment.markedBy = req.admin._id;
+      feePayment.remarks = remarks || feePayment.remarks;
+
+      await feePayment.save();
+
+      console.log(`✅ Payment recorded - Amount: Rs ${amountPaid}, Total Paid: Rs ${feePayment.amountPaid}, Remaining: Rs ${feePayment.remainingAmount}`);
+    } else {
+      // Create new payment record
+      const remainingAmount = totalDue - amountPaid;
+      let status = 'Pending';
+
+      if (remainingAmount <= 0) {
+        status = 'Paid';
+      } else if (amountPaid > 0) {
+        status = 'Partial';
+      }
+
+      feePayment = await FeePayment.create({
+        schoolId: req.schoolId,
+        studentId,
+        classId,
+        month,
+        year,
+        amount: totalDue, // Store total due (current month + previous dues)
+        amountPaid,
+        remainingAmount,
+        partialPayments: [{
+          amount: amountPaid,
+          paymentDate: new Date(),
+          remarks,
+          markedBy: req.admin._id
+        }],
+        status,
+        paymentDate: status === 'Paid' ? new Date() : null,
+        markedBy: req.admin._id,
+        remarks
+      });
+
+      console.log(`✅ New payment record created - Amount: Rs ${amountPaid}, Total Due: Rs ${totalDue}, Remaining: Rs ${feePayment.remainingAmount}`);
+    }
+
+    // Populate student and class details for invoice
+    await feePayment.populate([
+      { path: 'studentId', select: 'fullName rollNumber guardianName guardianPhone parentName parentPhone monthlyFee' },
+      { path: 'classId', select: 'className section' }
+    ]);
+
+    // Verify data was saved by querying again
+    const verifyPayment = await FeePayment.findById(feePayment._id);
+    console.log(`🔍 Verification - Payment in DB:`, {
+      id: verifyPayment._id,
+      status: verifyPayment.status,
+      amountPaid: verifyPayment.amountPaid,
+      remainingAmount: verifyPayment.remainingAmount,
+      invoiceCreated: verifyPayment.invoiceCreated
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Payment of Rs ${amountPaid} recorded successfully`,
+      data: feePayment
+    });
+
+  } catch (error) {
+    console.error('❌ Record payment error:', error);
+
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment record already exists for this student in this month. Please refresh the page.',
+        error: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to record payment',
+      error: error.message
+    });
+  }
+};
+
 export default {
   getClassFeeStatus,
   markFeePayment,
   getStudentFeeHistory,
   getClassFeeStats,
   getFeePaymentById,
-  createInvoice
+  createInvoice,
+  updateInvoice,
+  getInvoiceHistory,
+  recordPayment // NEW METHOD
 };

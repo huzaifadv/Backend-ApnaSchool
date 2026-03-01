@@ -32,9 +32,36 @@ const feePaymentSchema = new mongoose.Schema({
     required: [true, 'Fee amount is required'],
     min: [0, 'Amount cannot be negative']
   },
+  // Partial Payment Support
+  amountPaid: {
+    type: Number,
+    default: 0,
+    min: [0, 'Amount paid cannot be negative']
+  },
+  remainingAmount: {
+    type: Number,
+    default: function() {
+      return this.amount - (this.amountPaid || 0);
+    }
+  },
+  partialPayments: [{
+    amount: {
+      type: Number,
+      required: true
+    },
+    paymentDate: {
+      type: Date,
+      default: Date.now
+    },
+    remarks: String,
+    markedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin'
+    }
+  }],
   status: {
     type: String,
-    enum: ['Paid', 'Pending'],
+    enum: ['Paid', 'Partial', 'Pending'],
     default: 'Pending',
     required: true
   },

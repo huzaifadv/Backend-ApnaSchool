@@ -385,7 +385,12 @@ export const adminLogin = async (req, res, next) => {
         schoolName: school.schoolName,
         name: admin.name,
         email: admin.email,
-        role: admin.role
+        role: admin.role,
+        address: school.address,
+        city: school.city,
+        state: school.state,
+        phone: school.phone,
+        fbrEnabled: school.fbrEnabled || false
       }
     });
 
@@ -994,7 +999,12 @@ export const resetPassword = async (req, res, next) => {
         schoolName: school.schoolName,
         name: admin.name,
         email: admin.email,
-        role: admin.role
+        role: admin.role,
+        address: school.address,
+        city: school.city,
+        state: school.state,
+        phone: school.phone,
+        fbrEnabled: school.fbrEnabled || false
       }
     });
 

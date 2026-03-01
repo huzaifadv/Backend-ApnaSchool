@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { autoDeleteOldDiaries } from '../controllers/diaryController.js';
+import { generateMonthlyFeeRecords } from '../services/feeGenerationService.js';
 
 /**
  * Initialize all scheduled cron jobs
@@ -24,6 +25,24 @@ export const initializeCronJobs = () => {
   });
 
   console.log('✓ Cron job scheduled: Auto-delete old diaries (Daily at 2:00 AM)');
+
+  // Generate monthly fee records on 1st of every month
+  // Runs at 12:01 AM on the 1st of every month
+  cron.schedule('1 0 1 * *', async () => {
+    console.log('🗓️ Running scheduled task: Generate monthly fee records');
+    try {
+      const result = await generateMonthlyFeeRecords();
+      if (result.success) {
+        console.log(`✅ Cron job completed: Generated fee records for ${result.totalStudents} students across ${result.totalSchools} schools`);
+      } else {
+        console.error('❌ Cron job failed:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error running monthly fee generation cron job:', error);
+    }
+  });
+
+  console.log('✓ Cron job scheduled: Generate monthly fees (1st of every month at 12:01 AM)');
 };
 
 export default initializeCronJobs;
