@@ -660,9 +660,28 @@ export const updateInvoice = async (req, res, next) => {
       }
     }
 
+    // Generate invoice number if not exists
+    if (!feePayment.invoiceNumber) {
+      // Generate a unique invoice number (same logic as createInvoice)
+      const schoolIdentifier = req.schoolId.toString().slice(-6).toUpperCase();
+      const count = await FeePayment.countDocuments({
+        invoiceNumber: { $exists: true, $ne: null }
+      });
+      const sequenceNumber = (count + 1).toString().padStart(4, '0');
+      feePayment.invoiceNumber = `INV-${schoolIdentifier}-${sequenceNumber}`;
+      console.log(`📋 Generated invoice number: ${feePayment.invoiceNumber}`);
+    }
+
+    // Mark invoice as created (this is crucial for parent portal to show invoice)
+    feePayment.invoiceCreated = true;
+
     await feePayment.save();
 
-    console.log(`✅ Invoice updated: ${feePayment.invoiceNumber} for student: ${feePayment.studentId.fullName}`);
+    // Verify the save was successful
+    const verifiedPayment = await FeePayment.findById(paymentId);
+    console.log(`✅ Invoice saved successfully: ${verifiedPayment.invoiceNumber} for student: ${feePayment.studentId.fullName}`);
+    console.log(`   Invoice Created Flag: ${verifiedPayment.invoiceCreated}`);
+    console.log(`   Invoice Number: ${verifiedPayment.invoiceNumber}`);
 
     res.status(200).json({
       success: true,

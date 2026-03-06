@@ -7,7 +7,7 @@ import {
   getStudentNotices,
   getStudentAttendance
 } from '../controllers/tenantParentController.js';
-import { getParentChildFees } from '../controllers/parentFeeController.js';
+import { getParentChildFees, getParentInvoice } from '../controllers/parentFeeController.js';
 import { extractSchoolId } from '../middleware/tenantMiddleware.js';
 import { protectParent } from '../middleware/authMiddleware.js';
 
@@ -46,5 +46,6 @@ router.get('/reports', getStudentReports);
 router.get('/notices', getStudentNotices);
 router.get('/attendance', getStudentAttendance);
 router.get('/fees', getParentChildFees);
+router.get('/fees/invoice/:paymentId', getParentInvoice);
 
 export default router;
