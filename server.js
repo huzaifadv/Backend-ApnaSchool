@@ -86,6 +86,7 @@ const corsOptions = {
     const allowedOrigins = process.env.NODE_ENV === 'production'
       ? [
           process.env.FRONTEND_URL,
+          'https://app.apnaschooledu.com', // Production frontend
           'https://apnaschooledu.com', // Non-www version
           'https://www.apnaschooledu.com' // www version
         ].filter(Boolean)
@@ -100,6 +101,8 @@ const corsOptions = {
     }
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
