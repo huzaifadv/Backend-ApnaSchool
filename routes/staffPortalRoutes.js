@@ -44,9 +44,8 @@ const loginValidation = [
   body('staffId')
     .trim().notEmpty().withMessage('Staff ID is required'),
   body('password')
-    .notEmpty().withMessage('Password is required'),
-  body('schoolId')
-    .trim().notEmpty().withMessage('School ID is required')
+    .notEmpty().withMessage('Password is required')
+  // schoolId removed - auto-detected from staffId
 ];
 
 // ── Public Routes ─────────────────────────────────────────────────────────────

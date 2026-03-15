@@ -74,10 +74,40 @@ const studentSchema = new mongoose.Schema({
     trim: true,
     length: 8
   },
+  // Legacy field - kept for backward compatibility
   monthlyFee: {
     type: Number,
     default: 0,
     min: [0, 'Monthly fee cannot be negative']
+  },
+  // NEW: Detailed fee profile for structured fee management
+  feeProfile: {
+    tuitionFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Tuition fee cannot be negative']
+    },
+    fundFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Fund fee cannot be negative']
+    },
+    hostelFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Hostel fee cannot be negative']
+    },
+    transportFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Transport fee cannot be negative']
+    }
+  },
+  // Calculated total from fee profile (or fallback to legacy monthlyFee)
+  totalMonthlyFee: {
+    type: Number,
+    default: 0,
+    min: [0, 'Total monthly fee cannot be negative']
   },
   feeDueDate: {
     type: Number,
@@ -608,12 +638,150 @@ const feePaymentSchema = new mongoose.Schema({
     required: [true, 'Year is required'],
     min: [2000, 'Year must be valid']
   },
+
+  // ── Enhanced Fee Structure ──────────────────────────────────────────────
+  // Base amount (backward compatible - kept for legacy support)
   amount: {
     type: Number,
     required: [true, 'Fee amount is required'],
     min: [0, 'Amount cannot be negative']
   },
-  // Partial Payment Support
+
+  // NEW: Detailed Fee Breakdown (matches student feeProfile structure)
+  feeBreakdown: {
+    tuitionFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Tuition fee cannot be negative']
+    },
+    fundFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Fund fee cannot be negative']
+    },
+    hostelFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Hostel fee cannot be negative']
+    },
+    transportFee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Transport fee cannot be negative']
+    }
+  },
+
+  // NEW: Extra Charges (books, exams, uniforms, etc.)
+  extraCharges: [{
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: [0, 'Extra charge amount cannot be negative']
+    },
+    description: {
+      type: String,
+      trim: true
+    },
+    addedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin'
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+
+  // NEW: Previous Month's Unpaid Dues (auto-carried forward)
+  previousDues: {
+    type: Number,
+    default: 0,
+    min: [0, 'Previous dues cannot be negative']
+  },
+
+  // NEW: Fine/Penalty (separate from late fee)
+  fine: {
+    type: Number,
+    default: 0,
+    min: [0, 'Fine cannot be negative']
+  },
+  fineReason: {
+    type: String,
+    trim: true
+  },
+
+  // Fee Breakdown by Categories (NEW)
+  feeCategories: [{
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FeeCategory'
+    },
+    categoryName: String,  // Denormalized for quick access
+    amount: Number,
+    isRecurring: Boolean,  // Monthly recurring or one-time
+    description: String
+  }],
+
+  // Charges & Adjustments (NEW)
+  lateFee: {
+    type: Number,
+    default: 0,
+    min: [0, 'Late fee cannot be negative']
+  },
+  discount: {
+    type: Number,
+    default: 0,
+    min: [0, 'Discount cannot be negative']
+  },
+  discountType: {
+    type: String,
+    enum: ['None', 'Sibling', 'Merit', 'Financial', 'Custom'],
+    default: 'None'
+  },
+  discountReason: String,
+
+  // Due Date & Late Fee Logic (NEW)
+  dueDate: {
+    type: Date
+  },
+  isOverdue: {
+    type: Boolean,
+    default: false
+  },
+
+  // Total Calculation (Enhanced to include all components)
+  totalAmount: {
+    type: Number,
+    default: function() {
+      // Calculate base from feeBreakdown if available, otherwise use legacy amount
+      let base = this.amount || 0;
+      if (this.feeBreakdown) {
+        const breakdown = this.feeBreakdown;
+        base = (breakdown.tuitionFee || 0) +
+               (breakdown.fundFee || 0) +
+               (breakdown.hostelFee || 0) +
+               (breakdown.transportFee || 0);
+      }
+
+      // Add extra charges
+      const extraTotal = (this.extraCharges || []).reduce((sum, charge) => sum + (charge.amount || 0), 0);
+
+      // Add other components
+      const previousDues = this.previousDues || 0;
+      const late = this.lateFee || 0;
+      const fine = this.fine || 0;
+      const disc = this.discount || 0;
+
+      return base + extraTotal + previousDues + late + fine - disc;
+    }
+  },
+
+  // Partial Payment Support (Existing - Enhanced)
   amountPaid: {
     type: Number,
     default: 0,
@@ -622,9 +790,26 @@ const feePaymentSchema = new mongoose.Schema({
   remainingAmount: {
     type: Number,
     default: function() {
-      return this.amount - (this.amountPaid || 0);
+      const total = this.totalAmount || this.amount || 0;
+      return total - (this.amountPaid || 0);
     }
   },
+
+  // Installment Plan (NEW)
+  hasInstallmentPlan: {
+    type: Boolean,
+    default: false
+  },
+  installmentPlan: {
+    totalInstallments: Number,
+    installmentAmount: Number,
+    completedInstallments: {
+      type: Number,
+      default: 0
+    },
+    nextDueDate: Date
+  },
+
   partialPayments: [{
     amount: {
       type: Number,
@@ -634,15 +819,22 @@ const feePaymentSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     },
+    paymentMethod: {
+      type: String,
+      enum: ['Cash', 'Bank Transfer', 'Online', 'Cheque', 'Other'],
+      default: 'Cash'
+    },
+    transactionId: String,
     remarks: String,
     markedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Admin'
     }
   }],
+
   status: {
     type: String,
-    enum: ['Paid', 'Partial', 'Pending'],
+    enum: ['Paid', 'Partial', 'Pending', 'Overdue'],
     default: 'Pending',
     required: true
   },
@@ -657,7 +849,8 @@ const feePaymentSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  // Local Invoice Number
+
+  // Invoice & Voucher (Enhanced)
   invoiceNumber: {
     type: String,
     default: null
@@ -666,7 +859,13 @@ const feePaymentSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  // FBR Integration Fields
+  voucherGenerated: {
+    type: Boolean,
+    default: false
+  },
+  voucherNumber: String,
+
+  // FBR Integration Fields (Existing)
   isFbrReported: {
     type: Boolean,
     default: false
@@ -702,7 +901,159 @@ const feePaymentSchema = new mongoose.Schema({
 feePaymentSchema.index({ studentId: 1, month: 1, year: 1 }, { unique: true });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STAFF MANAGEMENT SCHEMAS  (new — do NOT touch existing schemas above)
+// FEE CATEGORY SCHEMA (NEW - Advanced Fee Management)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const feeCategorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Category name is required'],
+    trim: true
+    // Examples: Tuition Fee, Admission Fee, Exam Fee, Lab Fee, Books, Uniform, Transport
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  amount: {
+    type: Number,
+    required: [true, 'Default amount is required'],
+    min: [0, 'Amount cannot be negative']
+  },
+  isRecurring: {
+    type: Boolean,
+    default: true
+    // true = Monthly recurring (like Tuition), false = One-time (like Admission)
+  },
+  applicableClasses: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class'
+  }],
+  // If empty, applicable to all classes
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin'
+  },
+  sortOrder: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+});
+
+feeCategorySchema.index({ name: 1 });
+feeCategorySchema.index({ isActive: 1 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEE STRUCTURE SCHEMA (Class-wise Fee Configuration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const feeStructureSchema = new mongoose.Schema({
+  classId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class',
+    required: [true, 'Class ID is required']
+  },
+  className: String, // Denormalized
+  academicYear: {
+    type: String,
+    required: true
+  },
+  categories: [{
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FeeCategory'
+    },
+    categoryName: String,
+    amount: Number,
+    isRecurring: Boolean
+  }],
+  totalMonthlyFee: {
+    type: Number,
+    default: 0
+  },
+  lateFeePolicy: {
+    enabled: {
+      type: Boolean,
+      default: true
+    },
+    gracePeriodDays: {
+      type: Number,
+      default: 5
+    },
+    flatAmount: {
+      type: Number,
+      default: 0
+    },
+    percentageAmount: {
+      type: Number,
+      default: 0
+    }
+  },
+  dueDate: {
+    type: Number, // Day of month (1-31)
+    default: 10
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, {
+  timestamps: true
+});
+
+feeStructureSchema.index({ classId: 1, academicYear: 1 }, { unique: true });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DISCOUNT POLICY SCHEMA (Sibling, Merit, etc.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const discountPolicySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  type: {
+    type: String,
+    enum: ['Sibling', 'Merit', 'Financial', 'Custom'],
+    required: true
+  },
+  discountMode: {
+    type: String,
+    enum: ['Percentage', 'Flat'],
+    default: 'Percentage'
+  },
+  value: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  description: String,
+  conditions: {
+    minSiblings: Number,     // For Sibling discount
+    minPercentage: Number,   // For Merit discount
+    requiredDocuments: [String]
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  applicableCategories: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FeeCategory'
+  }]
+}, {
+  timestamps: true
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAFF MANAGEMENT SCHEMAS  (existing — do NOT touch existing schemas above)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Staff Schema
@@ -746,15 +1097,20 @@ const staffSchema = new mongoose.Schema({
     default: 'active'
   },
   // References to existing Class documents (read-only refs — staff NEVER writes to Class)
+  // Each class can have multiple subjects assigned to this teacher
   assignedClasses: [{
     classId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Class'
     },
     className: { type: String, trim: true },
-    section:   { type: String, trim: true }
+    section:   { type: String, trim: true },
+    subjects: [{
+      type: String,
+      trim: true
+    }]
   }],
-  // Subject names as strings (no separate Subject collection exists yet)
+  // Legacy field - kept for backward compatibility, prefer assignedClasses[].subjects
   assignedSubjects: [{
     type: String,
     trim: true
@@ -794,7 +1150,7 @@ const staffSchema = new mongoose.Schema({
   timestamps: true
 });
 
-staffSchema.index({ staffId: 1 });
+// staffId already has unique: true in schema, no need for separate index
 staffSchema.index({ status: 1 });
 
 // StaffSalaryHistory Schema
@@ -1179,7 +1535,11 @@ const modelNameMapping = {
   adminReports: 'AdminReport',
   feepayments: 'FeePayment',
   academicyears: 'AcademicYear',
-  // ── Staff Management (new — additive only) ──────────────────────────────
+  // ── Advanced Fee Management (NEW) ───────────────────────────────────────
+  feecategories: 'FeeCategory',
+  feestructures: 'FeeStructure',
+  discountpolicies: 'DiscountPolicy',
+  // ── Staff Management (existing) ─────────────────────────────────────────
   staffs: 'Staff',
   staffsalaryhistory: 'StaffSalaryHistory',
   staffattendance: 'StaffAttendance',
@@ -1204,7 +1564,11 @@ const schemaRegistry = {
   adminReports: adminReportSchema,
   feepayments: feePaymentSchema,
   academicyears: academicYearSchema,
-  // ── Staff Management (new — additive only) ──────────────────────────────
+  // ── Advanced Fee Management (NEW) ───────────────────────────────────────
+  feecategories: feeCategorySchema,
+  feestructures: feeStructureSchema,
+  discountpolicies: discountPolicySchema,
+  // ── Staff Management (existing) ─────────────────────────────────────────
   staffs: staffSchema,
   staffsalaryhistory: staffSalaryHistorySchema,
   staffattendance: staffAttendanceSchema,

@@ -523,18 +523,19 @@ export const getFeePaymentById = async (req, res, next) => {
 };
 
 /**
- * @desc    Create invoice for a paid fee
+ * @desc    Create invoice for a paid fee with additional charges
  * @route   POST /api/admin/fees/create-invoice/:paymentId
  * @access  Private (Admin only)
  */
 export const createInvoice = async (req, res, next) => {
   try {
     const { paymentId } = req.params;
+    const { additionalCharges = [], dueDate, note } = req.body;
 
     const FeePayment = await getModel(req.schoolId, 'feepayments');
 
     const feePayment = await FeePayment.findById(paymentId)
-      .populate('studentId', 'fullName rollNumber guardianName guardianPhone')
+      .populate('studentId', 'fullName rollNumber guardianName guardianPhone monthlyFee')
       .populate('classId', 'className section');
 
     if (!feePayment) {
@@ -573,6 +574,38 @@ export const createInvoice = async (req, res, next) => {
       return `INV-${schoolIdentifier}-${incrementNumber}`;
     };
 
+    // Calculate monthly fee from student record
+    const monthlyFee = feePayment.studentId?.monthlyFee || feePayment.amount || 0;
+
+    // Calculate additional charges total
+    const additionalTotal = additionalCharges.reduce((sum, charge) => {
+      return sum + (parseFloat(charge.amount) || 0);
+    }, 0);
+
+    // Calculate total fee
+    const totalFee = monthlyFee + additionalTotal;
+
+    // Update fee payment with invoice data
+    feePayment.monthlyFee = monthlyFee;
+    feePayment.additionalCharges = additionalCharges;
+    feePayment.totalFee = totalFee;
+    feePayment.amount = totalFee; // Update amount to match totalFee
+    feePayment.dueDate = dueDate || feePayment.dueDate;
+    feePayment.note = note || feePayment.note;
+
+    // Recalculate remaining amount based on new total
+    feePayment.remainingAmount = totalFee - (feePayment.amountPaid || 0);
+
+    // Update status based on remaining amount
+    if (feePayment.remainingAmount <= 0) {
+      feePayment.status = 'Paid';
+      if (!feePayment.paymentDate) {
+        feePayment.paymentDate = new Date();
+      }
+    } else if (feePayment.amountPaid > 0) {
+      feePayment.status = 'Partial';
+    }
+
     // Generate invoice number if not exists
     if (!feePayment.invoiceNumber) {
       feePayment.invoiceNumber = await generateInvoiceNumber();
@@ -583,6 +616,7 @@ export const createInvoice = async (req, res, next) => {
     await feePayment.save();
 
     console.log(`✅ Invoice created: ${feePayment.invoiceNumber} for student: ${feePayment.studentId.fullName}`);
+    console.log(`   Monthly Fee: Rs ${monthlyFee}, Additional Charges: Rs ${additionalTotal}, Total: Rs ${totalFee}`);
 
     res.status(200).json({
       success: true,

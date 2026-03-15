@@ -4,8 +4,8 @@ const teacherSchema = new mongoose.Schema({
   schoolId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'School',
-    required: true,
-    index: true
+    required: true
+    // index removed - covered by compound index below
   },
   employeeId: {
     type: String,

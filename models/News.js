@@ -63,8 +63,7 @@ newsSchema.pre('save', function (next) {
   next();
 });
 
-// Index for faster queries
-newsSchema.index({ slug: 1 });
+// Index for faster queries (slug already has unique: true, no need for separate index)
 newsSchema.index({ isPublished: 1, publishedAt: -1 });
 
 const News = mongoose.model('News', newsSchema);

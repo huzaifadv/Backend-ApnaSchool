@@ -71,8 +71,7 @@ courseSchema.pre('save', function (next) {
   next();
 });
 
-// Index for faster queries
-courseSchema.index({ slug: 1 });
+// Index for faster queries (slug already has unique: true, no need for separate index)
 courseSchema.index({ isPublished: 1, publishedAt: -1 });
 
 const Course = mongoose.model('Course', courseSchema);

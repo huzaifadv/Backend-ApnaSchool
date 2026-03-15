@@ -257,37 +257,77 @@ export const updateStaff = async (req, res) => {
  * @route   PUT /api/admin/staff/:id/assign
  * @access  Admin only
  *
- * Body: { classIds: [ObjectId], subjects: [String] }
- * Classes are verified to exist in the tenant's Class collection before assignment.
+ * Body: {
+ *   assignments: [
+ *     { classId: ObjectId, subjects: ['Math', 'Physics'] },
+ *     { classId: ObjectId, subjects: ['Chemistry'] }
+ *   ]
+ * }
+ * OR legacy format: { classIds: [ObjectId], subjects: [String] }
  */
 export const assignClassesAndSubjects = async (req, res) => {
   try {
-    const { classIds = [], subjects = [] } = req.body;
+    const { assignments = [], classIds = [], subjects = [] } = req.body;
 
     const Staff = await getModel(req.schoolId, 'staffs');
     const Class = await getModel(req.schoolId, 'classes');
 
-    // ── Verify each classId exists in this tenant ─────────────────────────
-    const classObjects = await Class.find({ _id: { $in: classIds } });
-    if (classObjects.length !== classIds.length) {
-      return res.status(400).json({
-        success: false,
-        message: 'One or more classIds are invalid'
+    let assignedClasses = [];
+
+    // ── New Format: Class-specific subject assignments ────────────────────
+    if (assignments && assignments.length > 0) {
+      const classIdsToVerify = assignments.map(a => a.classId);
+      const classObjects = await Class.find({ _id: { $in: classIdsToVerify } });
+
+      if (classObjects.length !== classIdsToVerify.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more classIds are invalid'
+        });
+      }
+
+      // Create class map for quick lookup
+      const classMap = {};
+      classObjects.forEach(c => {
+        classMap[c._id.toString()] = c;
+      });
+
+      // Build assigned classes with their specific subjects
+      assignedClasses = assignments.map(assignment => {
+        const cls = classMap[assignment.classId.toString()];
+        return {
+          classId: cls._id,
+          className: cls.className,
+          section: cls.section || '',
+          subjects: Array.isArray(assignment.subjects) ? assignment.subjects : []
+        };
       });
     }
+    // ── Legacy Format: All classes get same subjects ──────────────────────
+    else if (classIds && classIds.length > 0) {
+      const classObjects = await Class.find({ _id: { $in: classIds } });
 
-    const assignedClasses = classObjects.map(c => ({
-      classId:   c._id,
-      className: c.className,
-      section:   c.section || ''
-    }));
+      if (classObjects.length !== classIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more classIds are invalid'
+        });
+      }
+
+      assignedClasses = classObjects.map(c => ({
+        classId: c._id,
+        className: c.className,
+        section: c.section || '',
+        subjects: subjects || []
+      }));
+    }
 
     const staff = await Staff.findByIdAndUpdate(
       req.params.id,
       {
         $set: {
           assignedClasses,
-          assignedSubjects: subjects
+          assignedSubjects: subjects // Keep for backward compatibility
         }
       },
       { new: true, runValidators: true }

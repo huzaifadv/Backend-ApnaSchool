@@ -24,16 +24,24 @@ export const initMainDB = async () => {
     mainConnection = await mongoose.connect(process.env.MONGO_URI, {
       maxPoolSize: 10,
       minPoolSize: 2,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 30000, // Increased to 30 seconds for MongoDB Atlas
       socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000, // Connection timeout for Atlas
       retryWrites: true,
       retryReads: true,
     });
 
     console.log(`✓ Main DB Connected: ${mainConnection.connection.host}`);
+    console.log(`✓ Database: ${mainConnection.connection.name}`);
     return mainConnection;
   } catch (error) {
     console.error(`✗ Main DB Connection Error: ${error.message}`);
+    console.error(`✗ Connection String: ${process.env.MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`);
+    console.error(`\n💡 Troubleshooting Tips:`);
+    console.error(`   1. Check if your IP is whitelisted in MongoDB Atlas`);
+    console.error(`   2. Verify your database credentials`);
+    console.error(`   3. Ensure your internet connection is stable`);
+    console.error(`   4. Check MongoDB Atlas cluster status\n`);
     throw error;
   }
 };
@@ -157,8 +165,9 @@ export const getTenantConnection = async (schoolId, schoolName) => {
     const connection = mongoose.createConnection(mongoUri, {
       maxPoolSize: 5,
       minPoolSize: 1,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 30000, // Increased to 30 seconds for MongoDB Atlas
       socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000, // Connection timeout for Atlas
       retryWrites: true,
       retryReads: true,
     });

@@ -48,12 +48,12 @@ const getAssignedClass = (staff, classId) => {
 // ─── Authentication ───────────────────────────────────────────────────────────
 
 /**
- * @desc    Staff login
+ * @desc    Staff login (Auto-detect school from staffId)
  * @route   POST /api/staff/auth/login
  * @access  Public
  *
- * Body: { staffId: "STF-2026-0001", password: "...", schoolId: "..." }
- * schoolId is required because this is a multi-tenant system.
+ * Body: { staffId: "STF-2026-0001", password: "..." }
+ * School is automatically detected by searching all active schools.
  */
 export const staffLogin = async (req, res) => {
   try {
@@ -66,27 +66,53 @@ export const staffLogin = async (req, res) => {
       });
     }
 
-    const { staffId, password, schoolId } = req.body;
+    const { staffId, password } = req.body;
 
-    if (!schoolId) {
-      return res.status(400).json({
+    // Import School model to get all active schools
+    const { default: School } = await import('../models/School.js');
+
+    // Find all active schools
+    const activeSchools = await School.find({
+      isActive: true,
+      approvalStatus: 'approved'
+    }).select('_id schoolName');
+
+    if (!activeSchools || activeSchools.length === 0) {
+      return res.status(500).json({
         success: false,
-        message: 'School ID is required'
+        message: 'No active schools found in the system'
       });
     }
 
-    // Load staff with password (schema has select:false, so we must explicitly include it)
-    const Staff = await getModel(schoolId, 'staffs');
-    const staff = await Staff.findOne({ staffId }).select('+password');
+    // Search for staff across all school databases
+    let foundStaff = null;
+    let foundSchoolId = null;
 
-    if (!staff) {
+    for (const school of activeSchools) {
+      try {
+        const Staff = await getModel(school._id, 'staffs');
+        const staff = await Staff.findOne({ staffId }).select('+password');
+
+        if (staff) {
+          foundStaff = staff;
+          foundSchoolId = school._id.toString();
+          break; // Found the staff, stop searching
+        }
+      } catch (err) {
+        // If tenant DB doesn't exist or error, skip to next school
+        console.error(`Error checking school ${school.schoolName}:`, err.message);
+        continue;
+      }
+    }
+
+    if (!foundStaff) {
       return res.status(401).json({
         success: false,
         message: 'Invalid Staff ID or password'
       });
     }
 
-    if (!staff.isActive || staff.status === 'inactive') {
+    if (!foundStaff.isActive || foundStaff.status === 'inactive') {
       return res.status(401).json({
         success: false,
         message: 'Your account has been deactivated. Please contact the administrator.'
@@ -94,7 +120,7 @@ export const staffLogin = async (req, res) => {
     }
 
     // Compare password
-    const isMatch = await bcrypt.compare(password, staff.password);
+    const isMatch = await bcrypt.compare(password, foundStaff.password);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -102,10 +128,10 @@ export const staffLogin = async (req, res) => {
       });
     }
 
-    const token = generateStaffToken(staff, schoolId);
+    const token = generateStaffToken(foundStaff, foundSchoolId);
 
     // Return staff profile (without password)
-    const staffObj = staff.toObject();
+    const staffObj = foundStaff.toObject();
     delete staffObj.password;
 
     return res.status(200).json({

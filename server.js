@@ -49,6 +49,12 @@ import staffRoutes from './routes/staffRoutes.js';
 import staffPortalRoutes from './routes/staffPortalRoutes.js';
 // ── FBR POS Integration (new — safe extension) ────────────────────────────────
 import fbrRoutes from './routes/fbrRoutes.js';
+// ── Advanced Fee Management (NEW) ─────────────────────────────────────────────
+import feeCategoryRoutes from './routes/feeCategoryRoutes.js';
+import feeStructureRoutes from './routes/feeStructureRoutes.js';
+import discountPolicyRoutes from './routes/discountPolicyRoutes.js';
+import enhancedFeeRoutes from './routes/enhancedFeeRoutes.js';
+import studentFeeManagementRoutes from './routes/studentFeeManagementRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import initializeCronJobs from './config/cronJobs.js';
 
@@ -152,6 +158,12 @@ app.use('/api/admin/staff', staffRoutes);       // Admin manages staff
 app.use('/api/staff',       staffPortalRoutes); // Staff portal (login + own data)
 // ── FBR POS Integration (new — safe extension) ────────────────────────────────
 app.use('/api/admin/fbr', fbrRoutes);           // FBR configuration and testing
+// ── Advanced Fee Management (NEW) ─────────────────────────────────────────────
+app.use('/api/admin/fee-categories', feeCategoryRoutes);     // Fee category management
+app.use('/api/admin/fee-structures', feeStructureRoutes);    // Class-wise fee configuration
+app.use('/api/admin/discount-policies', discountPolicyRoutes); // Discount policies
+app.use('/api/admin/fees', enhancedFeeRoutes);               // Enhanced fee operations (generation, installments, etc.)
+app.use('/api/admin/student-fees', studentFeeManagementRoutes); // Student fee profiles & monthly fee management
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

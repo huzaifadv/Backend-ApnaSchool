@@ -154,14 +154,13 @@ export const createStudent = async (req, res, next) => {
       feeDueDate: feeDueDate || 1
     });
 
-    // Populate class details - use the same connection's Class model
-    await student.populate({
-      path: 'classId',
-      select: 'className section grade'
-    });
+    // Manually attach class details instead of populate to avoid schema registration issues
+    const classDetails = await Class.findById(classId).select('className section grade');
+    const studentWithClass = student.toObject();
+    studentWithClass.classId = classDetails;
 
-    // Return student data
-    const studentData = student.toObject();
+    // Use the student with class details
+    const studentData = studentWithClass;
 
     console.log('Student created with parentAccessCode:', studentData.parentAccessCode);
 

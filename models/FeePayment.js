@@ -32,6 +32,40 @@ const feePaymentSchema = new mongoose.Schema({
     required: [true, 'Fee amount is required'],
     min: [0, 'Amount cannot be negative']
   },
+  // Monthly Fee (Base Fee)
+  monthlyFee: {
+    type: Number,
+    default: 0,
+    min: [0, 'Monthly fee cannot be negative']
+  },
+  // Additional Charges (Books, Fine, Lab Fee, etc.)
+  additionalCharges: [{
+    label: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: [0, 'Amount cannot be negative']
+    }
+  }],
+  // Total Fee (Monthly Fee + Additional Charges)
+  totalFee: {
+    type: Number,
+    default: 0,
+    min: [0, 'Total fee cannot be negative']
+  },
+  // Due Date for Invoice
+  dueDate: {
+    type: Date
+  },
+  // Invoice Note
+  note: {
+    type: String,
+    trim: true
+  },
   // Partial Payment Support
   amountPaid: {
     type: Number,
