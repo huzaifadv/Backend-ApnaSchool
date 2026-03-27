@@ -9,7 +9,9 @@ import {
   createInvoice,
   updateInvoice,
   getInvoiceHistory,
-  recordPayment
+  recordPayment,
+  deleteInvoice,
+  getFeeAnalytics,
 } from '../controllers/tenantFeePaymentController.js';
 import { manualGenerateMonthlyFees } from '../services/feeGenerationService.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -18,6 +20,9 @@ const router = express.Router();
 
 // All routes require admin authentication
 router.use(protect);
+
+// School-wide fee analytics
+router.get('/analytics', getFeeAnalytics);
 
 // Get fee status for all students in a class
 router.get('/class/:classId', getClassFeeStatus);
@@ -39,6 +44,9 @@ router.post('/create-invoice/:paymentId', createInvoice);
 
 // Update invoice for editing
 router.put('/update-invoice/:paymentId', updateInvoice);
+
+// Delete invoice (keeps payment record, removes invoice data)
+router.delete('/delete-invoice/:paymentId', deleteInvoice);
 
 // Mark fee payment status
 router.post('/mark', [

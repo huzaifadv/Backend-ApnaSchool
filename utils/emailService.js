@@ -239,8 +239,57 @@ export const sendPasswordResetEmail = async (email, otp, adminName) => {
   }
 };
 
+export const sendEmailChangeOTP = async (email, otp, schoolName) => {
+  const transporter = createTransporter();
+  if (!transporter) {
+    console.error('Cannot send email change OTP - email service not configured');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const mailOptions = {
+    from: `"Apna School" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: 'Verify Your New Email - Apna School',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+        <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #7c3aed; margin: 0; font-size: 28px;">Apna School</h1>
+            <p style="color: #666; margin: 5px 0;">School Management System</p>
+          </div>
+          <h2 style="color: #7c3aed; margin-bottom: 20px;">Verify New Email Address</h2>
+          <p style="color: #333; line-height: 1.6;">A request was made to change the email for <strong>${schoolName}</strong>.</p>
+          <p style="color: #333; line-height: 1.6;">Your verification OTP is:</p>
+          <div style="background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); padding: 20px; text-align: center; border-radius: 8px; margin: 25px 0;">
+            <div style="background-color: white; padding: 15px; border-radius: 5px; display: inline-block;">
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #7c3aed;">${otp}</span>
+            </div>
+          </div>
+          <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <p style="margin: 0; color: #856404;"><strong>⏰ This OTP will expire in 10 minutes.</strong></p>
+          </div>
+          <p style="color: #666; font-size: 14px;">If you didn't request this change, please ignore this email.</p>
+          <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+          <div style="text-align: center;">
+            <p style="color: #999; font-size: 12px;">© 2024 Apna School - Digital Education Platform</p>
+          </div>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending email change OTP:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   sendVerificationEmail,
   sendSchoolRegistrationOTP,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  sendEmailChangeOTP
 };

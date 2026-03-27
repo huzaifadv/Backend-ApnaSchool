@@ -221,3 +221,61 @@ export const uploadReportImage = multer({
     fileSize: 300 * 1024 // 300KB limit
   }
 });
+
+// ============================================
+// CLOUDINARY STORAGE FOR SCHOOL LOGOS
+// ============================================
+
+const schoolLogoStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'apnaschool/school-logos',
+    allowed_formats: ['jpg', 'jpeg', 'png'],
+    transformation: [
+      { quality: 'auto:good' }
+    ],
+  },
+});
+
+const schoolLogoFileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+  if (!allowedTypes.includes(file.mimetype)) {
+    return cb(new Error('Only JPG and PNG images are allowed for school logo'), false);
+  }
+  cb(null, true);
+};
+
+export const uploadSchoolLogo = multer({
+  storage: schoolLogoStorage,
+  fileFilter: schoolLogoFileFilter,
+  limits: { fileSize: 500 * 1024 }, // 500KB hard limit
+});
+
+// ============================================
+// CLOUDINARY STORAGE FOR STAFF PHOTOS
+// ============================================
+
+const staffPhotoStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'apnaschool/staff-photos',
+    allowed_formats: ['jpg', 'jpeg', 'png'],
+    transformation: [
+      { width: 500, height: 500, crop: 'fill', gravity: 'face' }
+    ],
+  },
+});
+
+const staffPhotoFileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+  if (!allowedTypes.includes(file.mimetype)) {
+    return cb(new Error('Only JPG and PNG images are allowed for staff photo'), false);
+  }
+  cb(null, true);
+};
+
+export const uploadStaffPhoto = multer({
+  storage: staffPhotoStorage,
+  fileFilter: staffPhotoFileFilter,
+  limits: { fileSize: 500 * 1024 }, // 500KB hard limit
+});

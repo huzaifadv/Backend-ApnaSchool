@@ -20,12 +20,21 @@ export const getClassFeeStatus = async (req, res, next) => {
 
     const Student = await getModel(req.schoolId, 'students');
     const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Class = await getModel(req.schoolId, 'classes'); // Register Class model
 
     // Get all students in the class
     const students = await Student.find({ classId, isActive: true })
       .select('fullName rollNumber monthlyFee feeDueDate classId')
-      .populate('classId', 'className section')
-      .sort({ rollNumber: 1 });
+      .sort({ rollNumber: 1 })
+      .lean();
+
+    // Manually fetch class info to avoid populate() issues in multi-tenant setup
+    let classData = null;
+    if (students.length > 0 && students[0].classId) {
+      classData = await Class.findById(classId)
+        .select('className section')
+        .lean();
+    }
 
     // Get fee payment records for these students for the selected month/year
     const studentIds = students.map(s => s._id);
@@ -76,7 +85,7 @@ export const getClassFeeStatus = async (req, res, next) => {
         previousMonthDues: previousRemaining,
         totalDue: totalDue,
         feeDueDate: student.feeDueDate,
-        classId: student.classId, // Include populated classId
+        classId: classData, // Use manually fetched classData instead of populated field
         status: payment ? payment.status : 'Pending',
         paymentDate: payment ? payment.paymentDate : null,
         paymentId: payment ? payment._id : null,
@@ -396,9 +405,11 @@ export const getStudentFeeHistory = async (req, res, next) => {
 
     const FeePayment = await getModel(req.schoolId, 'feepayments');
     const Student = await getModel(req.schoolId, 'students');
+    const Class = await getModel(req.schoolId, 'classes');
 
     const student = await Student.findById(studentId)
-      .select('fullName rollNumber monthlyFee feeDueDate');
+      .select('fullName rollNumber monthlyFee feeDueDate')
+      .lean();
 
     if (!student) {
       return res.status(404).json({
@@ -407,9 +418,80 @@ export const getStudentFeeHistory = async (req, res, next) => {
       });
     }
 
+    // Fetch fee payments without populate (multi-tenant safe)
     const feePayments = await FeePayment.find({ studentId })
       .sort({ year: -1, month: -1 })
-      .populate('markedBy', 'name email');
+      .lean();
+
+    // Manually populate student and class data
+    for (const payment of feePayments) {
+      if (payment.studentId) {
+        payment.studentId = await Student.findById(payment.studentId)
+          .select('fullName rollNumber')
+          .lean();
+      }
+      if (payment.classId) {
+        payment.classId = await Class.findById(payment.classId)
+          .select('className section')
+          .lean();
+      }
+    }
+
+    // Map extraCharges to additionalCharges for frontend compatibility
+    // AND auto-fix status based on monthlyFee (not totalFee)
+    let statusUpdated = false;
+    for (const payment of feePayments) {
+      payment.additionalCharges = (payment.extraCharges || []).map(charge => ({
+        label: charge.name,  // DB uses 'name', frontend expects 'label'
+        amount: charge.amount,
+        status: charge.status || 'pending',
+        _id: charge._id
+      }));
+
+      // Auto-fix status if needed (based on monthlyFee only, not total)
+      if (payment.monthlyFee && payment.amountPaid !== undefined) {
+        const correctRemaining = payment.monthlyFee - payment.amountPaid;
+        let correctStatus = 'Pending';
+
+        if (correctRemaining <= 0) {
+          correctStatus = 'Paid';
+        } else if (payment.amountPaid > 0) {
+          correctStatus = 'Partial';
+        }
+
+        console.log(`🔍 Checking payment ${payment._id}:`, {
+          monthlyFee: payment.monthlyFee,
+          amountPaid: payment.amountPaid,
+          correctRemaining,
+          currentStatus: payment.status,
+          correctStatus
+        });
+
+        // Update if status is incorrect
+        if (payment.status !== correctStatus) {
+          console.log(`⚠️ Status mismatch! Current: ${payment.status}, Should be: ${correctStatus}`);
+          const paymentDoc = await FeePayment.findById(payment._id);
+          if (paymentDoc) {
+            paymentDoc.status = correctStatus;
+            paymentDoc.remainingAmount = correctRemaining;
+            if (correctStatus === 'Paid' && !paymentDoc.paymentDate) {
+              paymentDoc.paymentDate = new Date();
+            }
+            await paymentDoc.save();
+            payment.status = correctStatus;
+            payment.remainingAmount = correctRemaining;
+            statusUpdated = true;
+            console.log(`✅ Auto-fixed status for payment ${payment._id}: ${correctStatus}`);
+          }
+        }
+      }
+    }
+
+    if (statusUpdated) {
+      console.log('🔧 Some payment statuses were auto-corrected');
+    }
+
+    console.log('📊 Fee Payments Data Sample:', feePayments[0]); // Debug log
 
     res.status(200).json({
       success: true,
@@ -492,10 +574,10 @@ export const getFeePaymentById = async (req, res, next) => {
     const { paymentId } = req.params;
 
     const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Student = await getModel(req.schoolId, 'students');
+    const Class = await getModel(req.schoolId, 'classes');
 
-    const feePayment = await FeePayment.findById(paymentId)
-      .populate('studentId', 'fullName rollNumber guardianName guardianPhone parentName parentPhone monthlyFee')
-      .populate('classId', 'className section');
+    const feePayment = await FeePayment.findById(paymentId).lean();
 
     if (!feePayment) {
       return res.status(404).json({
@@ -504,12 +586,37 @@ export const getFeePaymentById = async (req, res, next) => {
       });
     }
 
+    // Manually populate student data
+    if (feePayment.studentId) {
+      feePayment.studentId = await Student.findById(feePayment.studentId)
+        .select('fullName rollNumber guardianName guardianPhone parentName parentPhone monthlyFee')
+        .lean();
+    }
+
+    // Manually populate class data
+    if (feePayment.classId) {
+      feePayment.classId = await Class.findById(feePayment.classId)
+        .select('className section')
+        .lean();
+    }
+
+    // Map extraCharges to additionalCharges for frontend compatibility
+    // Also map 'name' back to 'label' for frontend
+    feePayment.additionalCharges = (feePayment.extraCharges || []).map(charge => ({
+      label: charge.name,
+      amount: charge.amount,
+      status: charge.status || 'pending',
+      _id: charge._id
+    }));
+
     console.log('📄 Sending fee payment to invoice:', {
       id: feePayment._id,
       studentName: feePayment.studentId?.fullName,
       monthlyFee: feePayment.studentId?.monthlyFee,
       amountPaid: feePayment.amountPaid,
-      remainingAmount: feePayment.remainingAmount
+      remainingAmount: feePayment.remainingAmount,
+      additionalCharges: feePayment.additionalCharges,
+      totalFee: feePayment.totalFee
     });
 
     res.status(200).json({
@@ -532,11 +639,13 @@ export const createInvoice = async (req, res, next) => {
     const { paymentId } = req.params;
     const { additionalCharges = [], dueDate, note } = req.body;
 
-    const FeePayment = await getModel(req.schoolId, 'feepayments');
+    console.log('📝 Creating invoice with additionalCharges (frontend name):', additionalCharges);
 
-    const feePayment = await FeePayment.findById(paymentId)
-      .populate('studentId', 'fullName rollNumber guardianName guardianPhone monthlyFee')
-      .populate('classId', 'className section');
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Student = await getModel(req.schoolId, 'students');
+    const Class = await getModel(req.schoolId, 'classes');
+
+    const feePayment = await FeePayment.findById(paymentId);
 
     if (!feePayment) {
       return res.status(404).json({
@@ -582,21 +691,35 @@ export const createInvoice = async (req, res, next) => {
       return sum + (parseFloat(charge.amount) || 0);
     }, 0);
 
-    // Calculate total fee
-    const totalFee = monthlyFee + additionalTotal;
+    // Total fee is ONLY monthly fee (additional charges stored separately)
+    const totalFee = monthlyFee;
+
+    // Map 'label' to 'name' for database compatibility
+    const mappedCharges = additionalCharges.map(charge => ({
+      name: charge.label || charge.name,
+      amount: charge.amount,
+      status: charge.status || 'pending'
+    }));
 
     // Update fee payment with invoice data
     feePayment.monthlyFee = monthlyFee;
-    feePayment.additionalCharges = additionalCharges;
+    feePayment.extraCharges = mappedCharges; // Save as extraCharges (DB field name)
+    feePayment.markModified('extraCharges'); // Force Mongoose to save array
     feePayment.totalFee = totalFee;
-    feePayment.amount = totalFee; // Update amount to match totalFee
+    feePayment.amount = totalFee; // Amount is only monthly fee
     feePayment.dueDate = dueDate || feePayment.dueDate;
     feePayment.note = note || feePayment.note;
 
-    // Recalculate remaining amount based on new total
-    feePayment.remainingAmount = totalFee - (feePayment.amountPaid || 0);
+    console.log('💾 Saving fee payment with:');
+    console.log('   📊 Monthly Fee:', monthlyFee);
+    console.log('   💰 Extra Charges (DB field):', additionalCharges);
+    console.log('   📈 Additional Total:', additionalTotal);
+    console.log('   💵 Total Fee:', totalFee);
 
-    // Update status based on remaining amount
+    // Recalculate remaining amount based on MONTHLY FEE only (not total with additional charges)
+    feePayment.remainingAmount = monthlyFee - (feePayment.amountPaid || 0);
+
+    // Update status based on remaining amount (only monthly fee matters for status)
     if (feePayment.remainingAmount <= 0) {
       feePayment.status = 'Paid';
       if (!feePayment.paymentDate) {
@@ -615,13 +738,43 @@ export const createInvoice = async (req, res, next) => {
     feePayment.invoiceCreated = true;
     await feePayment.save();
 
-    console.log(`✅ Invoice created: ${feePayment.invoiceNumber} for student: ${feePayment.studentId.fullName}`);
-    console.log(`   Monthly Fee: Rs ${monthlyFee}, Additional Charges: Rs ${additionalTotal}, Total: Rs ${totalFee}`);
+    // Verify what was saved to database
+    const savedPayment = await FeePayment.findById(paymentId).lean();
+    console.log('✅ Verification - Data saved to database:');
+    console.log('   📊 monthlyFee:', savedPayment.monthlyFee);
+    console.log('   💰 extraCharges:', savedPayment.extraCharges);
+    console.log('   💵 totalFee:', savedPayment.totalFee);
+    console.log('   🔢 amount:', savedPayment.amount);
+
+    // Manually populate student and class data for response
+    const studentData = await Student.findById(feePayment.studentId)
+      .select('fullName rollNumber guardianName guardianPhone monthlyFee')
+      .lean();
+    const classData = await Class.findById(feePayment.classId)
+      .select('className section')
+      .lean();
+
+    // Create response object with populated data
+    const responseData = feePayment.toObject();
+    responseData.studentId = studentData;
+    responseData.classId = classData;
+
+    // Map extraCharges to additionalCharges for frontend compatibility
+    // Also map 'name' back to 'label' for frontend
+    responseData.additionalCharges = (responseData.extraCharges || []).map(charge => ({
+      label: charge.name,
+      amount: charge.amount,
+      status: charge.status || 'pending',
+      _id: charge._id
+    }));
+
+    console.log(`✅ Invoice created: ${feePayment.invoiceNumber}`);
+    console.log(`📤 Sending additionalCharges to frontend:`, responseData.additionalCharges);
 
     res.status(200).json({
       success: true,
       message: 'Invoice created successfully',
-      data: feePayment,
+      data: responseData,
       alreadyCreated: false
     });
 
@@ -640,11 +793,14 @@ export const updateInvoice = async (req, res, next) => {
     const { paymentId } = req.params;
     const { invoiceData } = req.body;
 
-    const FeePayment = await getModel(req.schoolId, 'feepayments');
+    console.log('📝 Updating invoice with data:', invoiceData);
+    console.log('📝 Additional charges received:', invoiceData?.additionalCharges);
 
-    const feePayment = await FeePayment.findById(paymentId)
-      .populate('studentId', 'fullName rollNumber guardianName guardianPhone monthlyFee feeDueDate')
-      .populate('classId', 'className section');
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Student = await getModel(req.schoolId, 'students');
+    const Class = await getModel(req.schoolId, 'classes');
+
+    const feePayment = await FeePayment.findById(paymentId);
 
     if (!feePayment) {
       return res.status(404).json({
@@ -655,8 +811,35 @@ export const updateInvoice = async (req, res, next) => {
 
     // Update invoice fields
     if (invoiceData) {
-      // Update the amount field if totalFee changed
+      // Update extra charges (database field is 'extraCharges', not 'additionalCharges')
+      if (invoiceData.additionalCharges !== undefined) {
+        console.log('📦 Before update - feePayment.extraCharges:', feePayment.extraCharges);
+
+        // Map 'label' to 'name' for database compatibility
+        const mappedCharges = invoiceData.additionalCharges.map(charge => ({
+          name: charge.label || charge.name,
+          amount: charge.amount,
+          status: charge.status || 'pending'
+        }));
+
+        // Save as 'extraCharges' to match database field
+        feePayment.extraCharges = mappedCharges;
+        // Mark as modified to ensure Mongoose saves it
+        feePayment.markModified('extraCharges');
+        console.log('📦 After update - feePayment.extraCharges:', feePayment.extraCharges);
+        console.log('✅ Extra charges updated and marked modified:', mappedCharges);
+      } else {
+        console.log('⚠️ No additionalCharges in invoiceData!');
+      }
+
+      // Update monthlyFee if provided
+      if (invoiceData.monthlyFee !== undefined) {
+        feePayment.monthlyFee = invoiceData.monthlyFee;
+      }
+
+      // Update totalFee and amount
       if (invoiceData.totalFee !== undefined) {
+        feePayment.totalFee = invoiceData.totalFee;
         feePayment.amount = invoiceData.totalFee;
       }
 
@@ -665,10 +848,20 @@ export const updateInvoice = async (req, res, next) => {
         feePayment.amountPaid = invoiceData.amountPaid;
       }
 
-      // Recalculate remaining amount
-      feePayment.remainingAmount = feePayment.amount - feePayment.amountPaid;
+      // Update due date
+      if (invoiceData.dueDate !== undefined) {
+        feePayment.dueDate = invoiceData.dueDate;
+      }
 
-      // Update status based on remaining amount
+      // Update note
+      if (invoiceData.note !== undefined) {
+        feePayment.note = invoiceData.note;
+      }
+
+      // Recalculate remaining amount based on MONTHLY FEE only (not total with additional charges)
+      feePayment.remainingAmount = feePayment.monthlyFee - feePayment.amountPaid;
+
+      // Update status based on remaining amount (only monthly fee matters for status)
       if (feePayment.remainingAmount <= 0) {
         feePayment.status = 'Paid';
         if (!feePayment.paymentDate) {
@@ -678,19 +871,6 @@ export const updateInvoice = async (req, res, next) => {
         feePayment.status = 'Partial';
       } else {
         feePayment.status = 'Pending';
-      }
-
-      // Store invoice customizations in remarks or a new field
-      if (invoiceData.note !== undefined || invoiceData.additionalCharges !== undefined || invoiceData.dueDate !== undefined) {
-        const invoiceMetadata = {
-          note: invoiceData.note,
-          additionalCharges: invoiceData.additionalCharges,
-          dueDate: invoiceData.dueDate,
-          lastUpdated: new Date()
-        };
-        feePayment.remarks = feePayment.remarks
-          ? `${feePayment.remarks}\n---INVOICE_METADATA---\n${JSON.stringify(invoiceMetadata)}`
-          : `---INVOICE_METADATA---\n${JSON.stringify(invoiceMetadata)}`;
       }
     }
 
@@ -709,18 +889,43 @@ export const updateInvoice = async (req, res, next) => {
     // Mark invoice as created (this is crucial for parent portal to show invoice)
     feePayment.invoiceCreated = true;
 
-    await feePayment.save();
+    const savedPayment = await feePayment.save();
+    console.log('💾 Mongoose save result - extraCharges:', savedPayment.extraCharges);
 
-    // Verify the save was successful
-    const verifiedPayment = await FeePayment.findById(paymentId);
-    console.log(`✅ Invoice saved successfully: ${verifiedPayment.invoiceNumber} for student: ${feePayment.studentId.fullName}`);
+    // Verify the save was successful and check extra charges
+    const verifiedPayment = await FeePayment.findById(paymentId).lean();
+    console.log(`✅ Invoice saved successfully: ${verifiedPayment.invoiceNumber}`);
     console.log(`   Invoice Created Flag: ${verifiedPayment.invoiceCreated}`);
-    console.log(`   Invoice Number: ${verifiedPayment.invoiceNumber}`);
+    console.log(`   Extra Charges Saved:`, verifiedPayment.extraCharges);
+
+    // Manually populate student and class data for response
+    const studentData = await Student.findById(feePayment.studentId)
+      .select('fullName rollNumber guardianName guardianPhone monthlyFee feeDueDate')
+      .lean();
+    const classData = await Class.findById(feePayment.classId)
+      .select('className section')
+      .lean();
+
+    // Create response object with populated data
+    const responseData = feePayment.toObject();
+    responseData.studentId = studentData;
+    responseData.classId = classData;
+
+    // Map extraCharges to additionalCharges for frontend compatibility
+    // Also map 'name' back to 'label' for frontend
+    responseData.additionalCharges = (responseData.extraCharges || []).map(charge => ({
+      label: charge.name,
+      amount: charge.amount,
+      status: charge.status || 'pending',
+      _id: charge._id
+    }));
+
+    console.log('📤 Sending response with additionalCharges:', responseData.additionalCharges);
 
     res.status(200).json({
       success: true,
       message: 'Invoice updated successfully',
-      data: feePayment
+      data: responseData
     });
 
   } catch (error) {
@@ -837,6 +1042,7 @@ export const recordPayment = async (req, res, next) => {
 
     const Student = await getModel(req.schoolId, 'students');
     const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Class = await getModel(req.schoolId, 'classes');
 
     // Get student details
     const student = await Student.findById(studentId);
@@ -954,11 +1160,18 @@ export const recordPayment = async (req, res, next) => {
       console.log(`✅ New payment record created - Amount: Rs ${amountPaid}, Total Due: Rs ${totalDue}, Remaining: Rs ${feePayment.remainingAmount}`);
     }
 
-    // Populate student and class details for invoice
-    await feePayment.populate([
-      { path: 'studentId', select: 'fullName rollNumber guardianName guardianPhone parentName parentPhone monthlyFee' },
-      { path: 'classId', select: 'className section' }
-    ]);
+    // Manually populate student and class details (multi-tenant safe)
+    const studentData = await Student.findById(feePayment.studentId)
+      .select('fullName rollNumber guardianName guardianPhone parentName parentPhone monthlyFee')
+      .lean();
+    const classData = await Class.findById(feePayment.classId)
+      .select('className section')
+      .lean();
+
+    // Create response object with populated data
+    const responseData = feePayment.toObject();
+    responseData.studentId = studentData;
+    responseData.classId = classData;
 
     // Verify data was saved by querying again
     const verifyPayment = await FeePayment.findById(feePayment._id);
@@ -973,7 +1186,7 @@ export const recordPayment = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `Payment of Rs ${amountPaid} recorded successfully`,
-      data: feePayment
+      data: responseData
     });
 
   } catch (error) {
@@ -996,6 +1209,137 @@ export const recordPayment = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Delete payment record completely (invoice + payment data)
+ * @route   DELETE /api/admin/fees/delete-invoice/:paymentId
+ * @access  Private (Admin only)
+ */
+export const deleteInvoice = async (req, res, next) => {
+  try {
+    const { paymentId } = req.params;
+
+    console.log('🗑️ Deleting payment record completely:', paymentId);
+
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+
+    // Find the payment record (no populate — tenant DB doesn't register Class/Student on the same connection)
+    const payment = await FeePayment.findById(paymentId);
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment record not found'
+      });
+    }
+
+    // Store details for logging before deletion
+    const deletedData = {
+      invoiceNumber: payment.invoiceNumber,
+      studentName: payment.studentId?.toString(),
+      month: payment.month,
+      year: payment.year,
+      amountPaid: payment.amountPaid,
+      status: payment.status,
+      remainingAmount: payment.remainingAmount
+    };
+
+    console.log('📋 Payment record to delete:', deletedData);
+
+    // IMPORTANT: Complete deletion - remove entire payment record from database
+    await FeePayment.findByIdAndDelete(paymentId);
+
+    console.log('✅ Payment record deleted completely:', {
+      paymentId,
+      deletedInvoiceNumber: deletedData.invoiceNumber,
+      deletedAmountPaid: deletedData.amountPaid,
+      deletedStatus: deletedData.status
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Payment record and invoice deleted successfully. Student: ${deletedData.studentName}, Month: ${deletedData.month}/${deletedData.year}`,
+      deletedData: deletedData
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to delete payment record:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete payment record',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get school-wide fee analytics
+ * @route   GET /api/admin/fees/analytics
+ * @access  Private (Admin only)
+ */
+export const getFeeAnalytics = async (req, res, next) => {
+  try {
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Student    = await getModel(req.schoolId, 'students');
+    const Class      = await getModel(req.schoolId, 'classes');
+
+    const allPayments = await FeePayment.find({}).lean();
+    const allStudents = await Student.find({}).select('monthlyFee totalMonthlyFee').lean();
+
+    // Sum of all students' monthly fees (total expected per month)
+    const totalMonthlyFees = allStudents.reduce((s, st) => s + (st.totalMonthlyFee || st.monthlyFee || 0), 0);
+
+    const totalCollected = allPayments.reduce((s, p) => s + (p.amountPaid || 0), 0);
+    const totalPending   = allPayments.reduce((s, p) => s + (p.remainingAmount || 0), 0);
+    const totalStudents  = allStudents.length;
+    const paidCount      = allPayments.filter(p => p.status === 'Paid').length;
+    const partialCount   = allPayments.filter(p => p.status === 'Partial').length;
+    const pendingCount   = allPayments.filter(p => p.status === 'Pending').length;
+
+    // Last 12 months monthly breakdown
+    const now = new Date();
+    const monthly = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const m = d.getMonth() + 1;
+      const y = d.getFullYear();
+      const recs = allPayments.filter(p => p.month === m && p.year === y);
+      monthly.push({
+        label: d.toLocaleString('default', { month: 'short' }) + ' ' + String(y).slice(2),
+        month: m,
+        year: y,
+        collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
+        pending:   Math.round(recs.reduce((s, p) => s + (p.remainingAmount || 0), 0)),
+        count:     recs.length,
+      });
+    }
+
+    // Per-class breakdown
+    const classes = await Class.find({}).select('className section').lean();
+    const classSummary = await Promise.all(classes.map(async (cls) => {
+      const studs = await Student.find({ classId: cls._id }).select('_id').lean();
+      const ids   = new Set(studs.map(s => s._id.toString()));
+      const recs  = allPayments.filter(p => p.studentId && ids.has(p.studentId.toString()));
+      return {
+        className: `${cls.className}-${cls.section}`,
+        collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
+        pending:   Math.round(recs.reduce((s, p) => s + (p.remainingAmount || 0), 0)),
+        students:  studs.length,
+      };
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summary: { totalMonthlyFees, totalCollected, totalPending, totalStudents, paidCount, partialCount, pendingCount },
+        monthly,
+        classSummary: classSummary.sort((a, b) => b.collected - a.collected),
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   getClassFeeStatus,
   markFeePayment,
@@ -1005,5 +1349,7 @@ export default {
   createInvoice,
   updateInvoice,
   getInvoiceHistory,
-  recordPayment // NEW METHOD
+  recordPayment,
+  deleteInvoice,
+  getFeeAnalytics,
 };

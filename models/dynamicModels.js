@@ -327,7 +327,7 @@ const noticeSchema = new mongoose.Schema({
   },
   targetAudience: {
     type: String,
-    enum: ['all', 'students', 'parents', 'teachers', 'specific_class'],
+    enum: ['all', 'students', 'parents', 'teachers', 'specific_class', 'staff'],
     default: 'all'
   },
   classId: {
@@ -341,6 +341,14 @@ const noticeSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'
+  },
+  isStaffOnly: {
+    type: Boolean,
+    default: false
+  },
+  includeStaff: {
+    type: Boolean,
+    default: false
   },
   isActive: {
     type: Boolean,
@@ -682,6 +690,11 @@ const feePaymentSchema = new mongoose.Schema({
       type: Number,
       required: true,
       min: [0, 'Extra charge amount cannot be negative']
+    },
+    status: {
+      type: String,
+      enum: ['paid', 'pending'],
+      default: 'pending'
     },
     description: {
       type: String,
@@ -1145,7 +1158,11 @@ const staffSchema = new mongoose.Schema({
   },
   profileImage: {
     type: String
-  }
+  },
+  readNotices: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Notice'
+  }]
 }, {
   timestamps: true
 });
@@ -1211,6 +1228,18 @@ const staffSalaryHistorySchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'   // Admin who recorded this payment
+  },
+  invoiceNumber: {
+    type: String,
+    default: null
+  },
+  invoiceCreated: {
+    type: Boolean,
+    default: false
+  },
+  invoiceCreatedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

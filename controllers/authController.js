@@ -4,6 +4,9 @@ import { validationResult } from 'express-validator';
 import School from '../models/School.js';
 import Admin from '../models/Admin.js';
 import SchoolRegistry from '../models/SchoolRegistry.js';
+import { generateOTP, hashOTP, verifyOTP, getOTPExpiry } from '../utils/otpHelper.js';
+import { sendEmailChangeOTP } from '../utils/emailService.js';
+import { getModel } from '../models/dynamicModels.js';
 
 // @desc    Register a new school
 // @route   POST /api/schools
@@ -670,15 +673,41 @@ export const updateSchoolDetails = async (req, res, next) => {
       req.body.password = await bcrypt.hash(req.body.password, salt);
     }
 
-    // Update school
+    const newEmail = req.body.email;
+    const emailChanging = newEmail && newEmail !== school.email;
+
+    // If email is changing, hold it as pending and send OTP instead
+    if (emailChanging) {
+      delete req.body.email;
+    }
+
+    // Update school (without email if it's changing)
     const updatedSchool = await School.findByIdAndUpdate(
       req.schoolId,
       req.body,
-      {
-        new: true,
-        runValidators: true
-      }
+      { new: true, runValidators: true }
     ).select('-password');
+
+    // Handle email change: store pending + send OTP
+    if (emailChanging) {
+      const otp = generateOTP();
+      updatedSchool.pendingEmail = newEmail;
+      updatedSchool.emailChangeOTP = hashOTP(otp);
+      updatedSchool.emailChangeExpires = getOTPExpiry();
+      await updatedSchool.save();
+
+      sendEmailChangeOTP(newEmail, otp, updatedSchool.schoolName).catch(err =>
+        console.error('Email change OTP send error:', err.message)
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Details saved. OTP sent to new email for verification.',
+        emailChanged: true,
+        pendingEmail: newEmail,
+        data: updatedSchool
+      });
+    }
 
     // Format plan details based on selectedPlan
     const planDetailsMap = {
@@ -708,6 +737,52 @@ export const updateSchoolDetails = async (req, res, next) => {
       data: schoolData
     });
 
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Verify OTP and confirm email change
+// @route   POST /api/admin/verify-email-change
+// @access  Private (Admin only)
+export const verifyEmailChange = async (req, res, next) => {
+  try {
+    const { otp } = req.body;
+    if (!otp) {
+      return res.status(400).json({ success: false, message: 'OTP is required' });
+    }
+
+    const school = await School.findById(req.schoolId);
+    if (!school || !school.pendingEmail || !school.emailChangeOTP) {
+      return res.status(400).json({ success: false, message: 'No pending email change found' });
+    }
+
+    if (new Date() > school.emailChangeExpires) {
+      return res.status(400).json({ success: false, message: 'OTP has expired' });
+    }
+
+    if (!verifyOTP(otp, school.emailChangeOTP)) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+
+    const newEmail = school.pendingEmail;
+
+    // Update school email
+    school.email = newEmail;
+    school.pendingEmail = undefined;
+    school.emailChangeOTP = undefined;
+    school.emailChangeExpires = undefined;
+    await school.save();
+
+    // Update admin email in tenant DB
+    try {
+      const AdminModel = await getModel(req.schoolId, 'admins');
+      await AdminModel.updateMany({}, { $set: { email: newEmail } });
+    } catch (err) {
+      console.error('Failed to update admin email in tenant DB:', err.message);
+    }
+
+    res.status(200).json({ success: true, message: 'Email updated successfully', email: newEmail });
   } catch (error) {
     next(error);
   }

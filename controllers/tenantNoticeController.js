@@ -28,7 +28,9 @@ export const createNotice = async (req, res, next) => {
       targetAudience,
       targetClasses, // Array of class IDs or 'all'
       classId, // Keep for backward compatibility
-      expiryDate
+      expiryDate,
+      isStaffOnly,
+      includeStaff
     } = req.body;
 
     const Notice = await getModel(req.schoolId, 'notices');
@@ -77,7 +79,9 @@ export const createNotice = async (req, res, next) => {
       targetClasses: finalTargetClasses,
       classId: finalTargetClasses.length > 0 ? finalTargetClasses[0] : null, // Keep for backward compatibility
       createdBy: req.userId,
-      expiryDate: expiryDate || null
+      expiryDate: expiryDate || null,
+      isStaffOnly: isStaffOnly || false,
+      includeStaff: includeStaff || false
     });
 
     console.log('Notice created with targetClasses:', notice.targetClasses);

@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
 import Student from '../models/Student.js';
+import School from '../models/School.js';
 
 // @desc    Verify parent access code and return JWT
 // @route   POST /api/parent/verify
@@ -26,7 +27,7 @@ export const verifyParentCode = async (req, res, next) => {
     })
       .select('-password')
       .populate('classId', 'className section grade academicYear')
-      .populate('schoolId', 'schoolName email phone');
+      .populate('schoolId', 'schoolName email phone logo');
 
     if (!student) {
       return res.status(401).json({
@@ -56,6 +57,7 @@ export const verifyParentCode = async (req, res, next) => {
         studentId: student._id,
         schoolId: student.schoolId._id,
         schoolName: student.schoolId.schoolName,
+        schoolLogo: student.schoolId.logo?.url || null,
         student: {
           fullName: student.fullName,
           rollNumber: student.rollNumber,
@@ -88,7 +90,7 @@ export const getStudentProfile = async (req, res, next) => {
     })
       .select('-password -parentAccessCode')
       .populate('classId', 'className section grade academicYear classTeacher room')
-      .populate('schoolId', 'schoolName email phone address city state');
+      .populate('schoolId', 'schoolName email phone address city state logo');
 
     if (!student) {
       return res.status(404).json({
@@ -102,6 +104,21 @@ export const getStudentProfile = async (req, res, next) => {
       data: student
     });
 
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getParentSchoolInfo = async (req, res, next) => {
+  try {
+    const school = await School.findById(req.schoolId).select('schoolName logo');
+    return res.status(200).json({
+      success: true,
+      data: {
+        schoolName: school?.schoolName || '',
+        logo: school?.logo?.url || null
+      }
+    });
   } catch (error) {
     next(error);
   }

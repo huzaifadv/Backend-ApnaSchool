@@ -12,29 +12,31 @@
 import bcrypt from 'bcryptjs';
 import { validationResult } from 'express-validator';
 import { getModel } from '../models/dynamicModels.js';
+import School from '../models/School.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Auto-generate a unique Staff ID in format STF-YYYY-NNNN
- * Reads existing staffs to determine the next sequence number.
+ * Auto-generate a unique Staff ID in format schoolname-XXXXXX
+ * e.g. webefy-563821
  */
-const generateStaffId = async (Staff, year) => {
-  const prefix = `STF-${year}-`;
-  // Find the highest existing sequence for this year
-  const last = await Staff.findOne(
-    { staffId: { $regex: `^${prefix}` } },
-    { staffId: 1 },
-    { sort: { staffId: -1 } }
-  );
+const generateStaffId = async (Staff, schoolName) => {
+  const slug = schoolName
+    .toLowerCase()
+    .split(' ')[0]
+    .replace(/[^a-z0-9]/g, '') || 'school';
 
-  let seq = 1;
-  if (last) {
-    const parts = last.staffId.split('-');
-    seq = parseInt(parts[2], 10) + 1;
-  }
+  let staffId;
+  let attempts = 0;
+  do {
+    const random = Math.floor(100000 + Math.random() * 900000); // 6 digits
+    staffId = `${slug}-${random}`;
+    const exists = await Staff.findOne({ staffId });
+    if (!exists) break;
+    attempts++;
+  } while (attempts < 20);
 
-  return `${prefix}${String(seq).padStart(4, '0')}`;
+  return staffId;
 };
 
 // ─── Controllers ──────────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ export const createStaff = async (req, res) => {
       status,
       role,
       baseSalary,
+      salaryDueDate,
       password
     } = req.body;
 
@@ -79,8 +82,8 @@ export const createStaff = async (req, res) => {
     }
 
     // ── Generate staffId ─────────────────────────────────────────────────
-    const year = new Date().getFullYear();
-    const staffId = await generateStaffId(Staff, year);
+    const schoolDoc = await School.findById(req.schoolId).select('schoolName');
+    const staffId = await generateStaffId(Staff, schoolDoc?.schoolName || 'school');
 
     // ── Hash password ─────────────────────────────────────────────────────
     const salt = await bcrypt.genSalt(10);
@@ -95,10 +98,12 @@ export const createStaff = async (req, res) => {
       joiningDate: joiningDate || Date.now(),
       status: status || 'active',
       role: role || 'teacher',
-      baseSalary: baseSalary || 0,
+      baseSalary: Number(baseSalary) || 0,
+      salaryDueDate: salaryDueDate ? Number(salaryDueDate) : null,
       password: passwordHash,
       assignedClasses: [],
-      assignedSubjects: []
+      assignedSubjects: [],
+      ...(req.file?.path && { profileImage: req.file.path })
     });
 
     // Never return password in response
@@ -225,6 +230,10 @@ export const updateStaff = async (req, res) => {
 
     // Prevent client from changing staffId or password through this endpoint
     const { staffId: _staffId, password: _pw, ...updateData } = req.body;
+
+    if (req.file?.path) {
+      updateData.profileImage = req.file.path;
+    }
 
     const Staff = await getModel(req.schoolId, 'staffs');
     const staff = await Staff.findByIdAndUpdate(
@@ -667,12 +676,53 @@ export const getStaffSalaryHistory = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        staff:  { name: staff.name, staffId: staff.staffId },
+        staff:  { _id: staff._id, name: staff.name, staffId: staff.staffId, role: staff.role, contact: staff.contact, profileImage: staff.profileImage, baseSalary: staff.baseSalary, salaryDueDate: staff.salaryDueDate },
         salary: history
       }
     });
   } catch (error) {
     console.error('getStaffSalaryHistory error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Create a salary slip (invoice) for a salary record
+ * @route   POST /api/admin/staff/:id/salary/:salaryId/invoice
+ * @access  Admin only
+ */
+export const createSalaryInvoice = async (req, res) => {
+  try {
+    const { id: staffId, salaryId } = req.params;
+
+    const SalaryHistory = await getModel(req.schoolId, 'staffsalaryhistory');
+    const record = await SalaryHistory.findOne({ _id: salaryId, staffId });
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Salary record not found' });
+    }
+
+    // Generate invoice number: SAL-{SCHOOLID_LAST6}-{SEQ}
+    const schoolIdLast6 = String(req.schoolId).slice(-6).toUpperCase();
+    const count = await SalaryHistory.countDocuments({ invoiceCreated: true });
+    const invoiceNumber = `SAL-${schoolIdLast6}-${String(count + 1).padStart(4, '0')}`;
+
+    record.invoiceNumber    = invoiceNumber;
+    record.invoiceCreated   = true;
+    record.invoiceCreatedAt = new Date();
+    await record.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Salary slip created successfully',
+      data: record
+    });
+  } catch (error) {
+    console.error('createSalaryInvoice error:', error);
     return res.status(500).json({
       success: false,
       message: 'Server error',

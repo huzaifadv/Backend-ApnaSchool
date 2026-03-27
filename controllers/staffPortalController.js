@@ -14,6 +14,7 @@ import jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
 import { getModel } from '../models/dynamicModels.js';
 import { isOwner } from '../middleware/staffAuthMiddleware.js';
+import School from '../models/School.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1012,6 +1013,168 @@ export const getMySalaryHistory = async (req, res) => {
     return res.status(200).json({ success: true, count: records.length, data: records });
   } catch (error) {
     console.error('getMySalaryHistory error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ─── Notices (view-only for staff) ──────────────────────────────────────────
+
+/**
+ * @desc    Get notices targeted to staff (targetAudience 'all' or 'staff', or isStaffOnly)
+ * @route   GET /api/staff/notices
+ * @access  Staff (protectStaff)
+ */
+export const getMyNotices = async (req, res) => {
+  try {
+    const Notice = await getModel(req.schoolId, 'notices');
+
+    const filter = {
+      isActive: true,
+      $or: [
+        { targetAudience: 'all' },
+        { targetAudience: 'staff' },
+        { isStaffOnly: true },
+        { includeStaff: true }
+      ]
+    };
+
+    // Filter out expired notices
+    const now = new Date();
+    filter.$and = [
+      { $or: [{ expiryDate: null }, { expiryDate: { $exists: false } }, { expiryDate: { $gte: now } }] }
+    ];
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const notices = await Notice.find(filter)
+      .populate('createdBy', 'name')
+      .populate('targetClasses', 'className section')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Notice.countDocuments(filter);
+
+    return res.status(200).json({
+      success: true,
+      count: notices.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: notices
+    });
+  } catch (error) {
+    console.error('getMyNotices error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * @desc    Get unread notice count for staff (active notices not yet read by this staff member)
+ * @route   GET /api/staff/notices/unread-count
+ * @access  Staff (protectStaff)
+ */
+export const getUnreadNoticeCount = async (req, res) => {
+  try {
+    const Notice = await getModel(req.schoolId, 'notices');
+    const Staff = await getModel(req.schoolId, 'staffs');
+
+    // Get this staff member's read notice IDs
+    const staffDoc = await Staff.findById(req.staffDbId).select('readNotices');
+    const readIds = staffDoc?.readNotices || [];
+
+    const now = new Date();
+    const count = await Notice.countDocuments({
+      isActive: true,
+      _id: { $nin: readIds },
+      $or: [
+        { targetAudience: 'all' },
+        { targetAudience: 'staff' },
+        { isStaffOnly: true },
+        { includeStaff: true }
+      ],
+      $and: [
+        { $or: [{ expiryDate: null }, { expiryDate: { $exists: false } }, { expiryDate: { $gte: now } }] }
+      ]
+    });
+
+    return res.status(200).json({ success: true, count });
+  } catch (error) {
+    console.error('getUnreadNoticeCount error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * @desc    Mark notices as read for current staff member
+ * @route   POST /api/staff/notices/mark-read
+ * @access  Staff (protectStaff)
+ */
+export const markNoticesRead = async (req, res) => {
+  try {
+    const { noticeIds } = req.body;
+
+    if (!noticeIds || !Array.isArray(noticeIds) || noticeIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'noticeIds array is required' });
+    }
+
+    const Staff = await getModel(req.schoolId, 'staffs');
+
+    // Add notice IDs to readNotices array (avoid duplicates with $addToSet)
+    await Staff.findByIdAndUpdate(req.staffDbId, {
+      $addToSet: { readNotices: { $each: noticeIds } }
+    });
+
+    return res.status(200).json({ success: true, message: 'Notices marked as read' });
+  } catch (error) {
+    console.error('markNoticesRead error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const getSchoolInfo = async (req, res) => {
+  try {
+    const school = await School.findById(req.schoolId).select("schoolName logo");
+    return res.status(200).json({
+      success: true,
+      data: {
+        schoolName: school?.schoolName || "",
+        logo: school?.logo?.url || school?.logo || null
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const getAcademicYearsForStaff = async (req, res) => {
+  try {
+    const AcademicYear = await getModel(req.schoolId, 'academicyears');
+    const years = await AcademicYear.find({}).sort({ createdAt: -1 }).select('year isCurrent');
+    return res.status(200).json({ success: true, data: years });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const updateStaffPhoto = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No image uploaded' });
+    }
+    const Staff = await getModel(req.schoolId, 'staffs');
+    const staff = await Staff.findByIdAndUpdate(
+      req.staffDbId,
+      { $set: { profileImage: req.file.path } },
+      { new: true }
+    ).select('-password');
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff not found' });
+    }
+    return res.status(200).json({ success: true, data: staff });
+  } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };

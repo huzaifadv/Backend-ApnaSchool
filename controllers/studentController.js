@@ -33,7 +33,8 @@ export const createStudent = async (req, res, next) => {
       parentPhone,
       parentEmail,
       monthlyFee,
-      feeDueDate
+      feeDueDate,
+      currentAcademicYear
     } = req.body;
 
     // Verify class belongs to admin's school
@@ -88,7 +89,8 @@ export const createStudent = async (req, res, next) => {
       parentEmail,
       parentAccessCode,
       monthlyFee: monthlyFee || 0,
-      feeDueDate: feeDueDate || 1
+      feeDueDate: feeDueDate || 1,
+      currentAcademicYear
     };
 
     // Add password only if provided
@@ -169,7 +171,7 @@ export const getStudents = async (req, res, next) => {
 
     const students = await Student.find(filter)
       .select('-password')
-      .populate('classId', 'className section grade')
+      .populate('classId', 'className section grade academicYear')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);

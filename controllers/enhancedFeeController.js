@@ -283,10 +283,20 @@ export const getFeeStatistics = async (req, res) => {
 export const getStudentFeeHistory = async (req, res) => {
   try {
     const FeePayment = await getModel(req.schoolId, 'feepayments');
+    const Class = await getModel(req.schoolId, 'classes');
 
     const fees = await FeePayment.find({ studentId: req.params.studentId })
       .sort({ year: -1, month: -1 })
-      .populate('classId', 'className section');
+      .lean();
+
+    // Manually populate class data for each fee record
+    for (const fee of fees) {
+      if (fee.classId) {
+        fee.classId = await Class.findById(fee.classId)
+          .select('className section')
+          .lean();
+      }
+    }
 
     const summary = fees.reduce((acc, fee) => {
       acc.totalFees += fee.totalAmount || 0;

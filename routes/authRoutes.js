@@ -12,10 +12,12 @@ import {
   getAllSchools,
   getSchoolById,
   sendChangePasswordOTP,
-  changePassword
+  changePassword,
+  uploadSchoolLogo
 } from '../controllers/tenantAuthController.js';
 
 import { protect } from '../middleware/authMiddleware.js';
+import { uploadSchoolLogo as schoolLogoUpload } from '../config/multer.js';
 
 const router = express.Router();
 
@@ -69,12 +71,12 @@ const schoolRegistrationValidation = [
     .withMessage('Admin name must be at least 2 characters long'),
 
   body('establishedYear')
-    .optional()
+    .optional({ checkFalsy: true })
     .isInt({ min: 1800, max: new Date().getFullYear() })
     .withMessage('Please provide a valid establishment year'),
 
   body('website')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isURL()
     .withMessage('Please provide a valid website URL')
@@ -124,7 +126,7 @@ const updateSchoolValidation = [
     .trim()
     .isEmail()
     .withMessage('Please provide a valid email')
-    .normalizeEmail(),
+    .normalizeEmail({ gmail_remove_dots: false }),
 
   body('password')
     .optional()
@@ -132,12 +134,12 @@ const updateSchoolValidation = [
     .withMessage('Password must be at least 8 characters long'),
 
   body('establishedYear')
-    .optional()
+    .optional({ checkFalsy: true })
     .isInt({ min: 1800, max: new Date().getFullYear() })
     .withMessage('Please provide a valid establishment year'),
 
   body('website')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isURL()
     .withMessage('Please provide a valid website URL')
@@ -153,7 +155,7 @@ const forgotPasswordValidation = [
     .withMessage('Email is required')
     .isEmail()
     .withMessage('Please provide a valid email')
-    .normalizeEmail()
+    .normalizeEmail({ gmail_remove_dots: false })
 ];
 
 // Validation rules for reset password
@@ -181,7 +183,7 @@ const resetPasswordValidation = [
 ];
 
 // Routes
-router.post('/schools', schoolRegistrationValidation, registerSchool);
+router.post('/schools', schoolLogoUpload.single('logo'), schoolRegistrationValidation, registerSchool);
 router.get('/schools', getAllSchools);
 router.get('/schools/:id', getSchoolById);
 
@@ -210,9 +212,56 @@ router.post('/auth/reset-password', resetPasswordValidation, resetPassword);
 // Protected admin routes
 router.get('/admin/school', protect, getSchoolDetails);
 router.put('/admin/school', protect, updateSchoolValidation, updateSchoolDetails);
+router.post('/admin/school/logo', protect, schoolLogoUpload.single('logo'), uploadSchoolLogo);
 
 // Change password routes (protected - for logged-in admin)
 router.post('/admin/send-change-password-otp', protect, sendChangePasswordOTP);
 router.post('/admin/change-password', protect, changePassword);
+
+
+
+// TEMP: fix admin email in tenant DB — DELETE after use
+router.get('/fix-admin-email', async (req, res) => {
+  try {
+    const mongoose = await import('mongoose');
+    const tenantDB = mongoose.default.connection.useDb('demo_school_db', { useCache: true });
+    const admins = await tenantDB.collection('admins').find({}).toArray();
+    console.log('All admins:', admins.map(a => ({ email: a.email, name: a.name })));
+
+    const result = await tenantDB.collection('admins').findOneAndUpdate(
+      { email: 'devehuzaifa@gmail.com' },
+      { $set: { email: 'deve.huzaifa@gmail.com' } },
+      { returnDocument: 'after' }
+    );
+    if (result) {
+      res.json({ success: true, message: 'Admin email fixed', email: result.email });
+    } else {
+      res.json({ success: false, message: 'Admin not found', allAdmins: admins.map(a => ({ email: a.email, name: a.name })) });
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+// TEMP: inspect tenant DB — DELETE after use
+router.get('/inspect-tenant', async (req, res) => {
+  try {
+    const mongoose = await import('mongoose');
+    const tenantDB = mongoose.default.connection.useDb('demo_school_db', { useCache: true });
+    const collections = await tenantDB.db.listCollections().toArray();
+    const result = {};
+    for (const col of collections) {
+      const docs = await tenantDB.collection(col.name).find({}).toArray();
+      result[col.name] = docs.map(d => {
+        const { password, ...rest } = d;
+        return rest;
+      });
+    }
+    res.json({ collections: Object.keys(collections.map(c=>c.name)), data: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 export default router;

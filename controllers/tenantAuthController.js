@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { v2 as cloudinary } from 'cloudinary';
 import jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
 import { initializeTenantDB } from '../config/tenantDB.js';
@@ -116,6 +117,13 @@ export const registerSchool = async (req, res, next) => {
 
     await school.save();
     console.log(`✓ School created with ID: ${school._id}`);
+
+    // Save logo if uploaded
+    if (req.file) {
+      school.logo = { url: req.file.path, publicId: req.file.filename };
+      await school.save();
+      console.log(`✓ School logo saved: ${req.file.path}`);
+    }
 
     // Initialize trial dates for FREE_TRIAL plans
     if (planType === 'trial') {
@@ -294,42 +302,20 @@ export const adminLogin = async (req, res, next) => {
     const { default: School } = await import('../models/School.js');
 
     const school = await School.findOne({ email });
+    console.log('[Login] Step1 school found:', !!school, 'email:', email);
+    if (!school) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    if (!school) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Step 2: Get admin from tenant database
     const Admin = await getModel(school._id, 'admins');
     const admin = await Admin.findOne({ email });
+    console.log('[Login] Step2 admin found:', !!admin);
+    if (!admin) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
+    console.log('[Login] Step3 isActive:', admin.isActive);
+    if (!admin.isActive) return res.status(401).json({ success: false, message: 'Your account has been deactivated.' });
 
-    // Check if admin is active
-    if (!admin.isActive) {
-      return res.status(401).json({
-        success: false,
-        message: 'Your account has been deactivated. Please contact support.'
-      });
-    }
-
-    // Validate password first
     const isPasswordValid = await bcrypt.compare(password, admin.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
+    console.log('[Login] Step4 password valid:', isPasswordValid);
+    if (!isPasswordValid) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
     // Check if email is verified
     if (!school.isEmailVerified) {
@@ -1215,6 +1201,49 @@ export const sendChangePasswordOTP = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Upload school logo
+ * @route   POST /api/admin/school/logo
+ * @access  Private (Admin only)
+ */
+export const uploadSchoolLogo = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    const { default: School } = await import('../models/School.js');
+    const school = await School.findById(req.schoolId);
+
+    if (!school) {
+      return res.status(404).json({ success: false, message: 'School not found' });
+    }
+
+    // Delete old logo from Cloudinary if exists
+    if (school.logo?.publicId) {
+      try {
+        await cloudinary.uploader.destroy(school.logo.publicId);
+      } catch (err) {
+        console.error('Error deleting old logo from Cloudinary:', err.message);
+      }
+    }
+
+    school.logo = {
+      url: req.file.path,
+      publicId: req.file.filename,
+    };
+    await school.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Logo uploaded successfully',
+      data: { logoUrl: school.logo.url },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   registerSchool,
   adminLogin,
@@ -1227,5 +1256,6 @@ export default {
   getAllSchools,
   getSchoolById,
   sendChangePasswordOTP,
-  changePassword
+  changePassword,
+  uploadSchoolLogo
 };

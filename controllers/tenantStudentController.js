@@ -253,17 +253,20 @@ export const getStudentById = async (req, res, next) => {
     const Student = await getModel(req.schoolId, 'students');
     const Class = await getModel(req.schoolId, 'classes');
 
-    const student = await Student.findById(req.params.id)
-      .populate({
-        path: 'classId',
-        select: 'className section grade academicYear'
-      });
+    const student = await Student.findById(req.params.id).lean();
 
     if (!student) {
       return res.status(404).json({
         success: false,
         message: 'Student not found'
       });
+    }
+
+    // Manually populate class data (multi-tenant safe)
+    if (student.classId) {
+      student.classId = await Class.findById(student.classId)
+        .select('className section grade academicYear')
+        .lean();
     }
 
     res.status(200).json({
@@ -333,7 +336,7 @@ export const updateStudent = async (req, res, next) => {
       }
     }
 
-    // Get Class model for populate
+    // Get Class model for manual populate
     const Class = await getModel(req.schoolId, 'classes');
 
     // Update student
@@ -344,11 +347,14 @@ export const updateStudent = async (req, res, next) => {
         new: true,
         runValidators: true
       }
-    )
-      .populate({
-        path: 'classId',
-        select: 'className section grade'
-      });
+    ).lean();
+
+    // Manually populate class data (multi-tenant safe)
+    if (updatedStudent && updatedStudent.classId) {
+      updatedStudent.classId = await Class.findById(updatedStudent.classId)
+        .select('className section grade')
+        .lean();
+    }
 
     res.status(200).json({
       success: true,

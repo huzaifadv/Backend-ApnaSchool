@@ -44,6 +44,10 @@ const noticeSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isStaffOnly: {
+    type: Boolean,
+    default: false
+  },
   attachments: [{
     fileName: String,
     fileUrl: String,

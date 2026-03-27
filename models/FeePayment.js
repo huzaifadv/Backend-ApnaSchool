@@ -38,16 +38,18 @@ const feePaymentSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Monthly fee cannot be negative']
   },
-  // Additional Charges (Books, Fine, Lab Fee, etc.)
-  additionalCharges: [{
-    label: {
+  // Extra Charges (Books, Fine, Lab Fee, etc.)
+  // Note: Database uses 'name' not 'label'
+  extraCharges: [{
+    name: {
       type: String,
-      required: true,
+      required: false,
       trim: true
     },
     amount: {
       type: Number,
-      required: true,
+      required: false,
+      default: 0,
       min: [0, 'Amount cannot be negative']
     }
   }],

@@ -81,7 +81,12 @@ const studentCreateValidation = [
     .trim()
     .isEmail()
     .withMessage('Please provide a valid parent email')
-    .normalizeEmail()
+    .normalizeEmail(),
+
+  body('currentAcademicYear')
+    .trim()
+    .notEmpty()
+    .withMessage('Academic year is required')
 ];
 
 // Validation rules for student update

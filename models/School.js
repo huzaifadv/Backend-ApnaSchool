@@ -145,6 +145,10 @@ const schoolSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Email Change Fields
+  pendingEmail: { type: String },
+  emailChangeOTP: { type: String },
+  emailChangeExpires: { type: Date },
   // Password Reset Fields (OTP still needed for password reset)
   resetPasswordOTP: {
     type: String // Hashed OTP
@@ -257,6 +261,17 @@ const schoolSchema = new mongoose.Schema({
       type: String,
       default: null,
       trim: true
+    }
+  },
+  // School Logo
+  logo: {
+    url: {
+      type: String,
+      default: null
+    },
+    publicId: {
+      type: String,
+      default: null
     }
   }
 }, {

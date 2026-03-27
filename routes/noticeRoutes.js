@@ -47,7 +47,7 @@ const noticeCreateValidation = [
 
   body('targetAudience')
     .optional()
-    .isIn(['All', 'Students', 'Parents', 'Teachers', 'Staff'])
+    .isIn(['all', 'students', 'parents', 'teachers', 'specific_class', 'staff'])
     .withMessage('Invalid target audience'),
 
   body('targetClasses')
@@ -102,7 +102,7 @@ const noticeUpdateValidation = [
 
   body('targetAudience')
     .optional()
-    .isIn(['All', 'Students', 'Parents', 'Teachers', 'Staff'])
+    .isIn(['all', 'students', 'parents', 'teachers', 'specific_class', 'staff'])
     .withMessage('Invalid target audience'),
 
   body('targetClasses')

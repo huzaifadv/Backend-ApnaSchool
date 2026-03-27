@@ -11,6 +11,7 @@
 import express from 'express';
 import { body } from 'express-validator';
 import { protectStaff } from '../middleware/staffAuthMiddleware.js';
+import { uploadStaffPhoto } from '../config/multer.js';
 import {
   staffLogin,
   getMyProfile,
@@ -33,7 +34,13 @@ import {
   updateMarksEntry,
   submitMonthlyReport,
   getMyMonthlyReports,
-  getMySalaryHistory
+  getMySalaryHistory,
+  getMyNotices,
+  getUnreadNoticeCount,
+  markNoticesRead,
+  getSchoolInfo,
+  getAcademicYearsForStaff,
+  updateStaffPhoto
 } from '../controllers/staffPortalController.js';
 
 const router = express.Router();
@@ -57,9 +64,12 @@ router.post('/auth/login', loginValidation, staffLogin);
 router.use(protectStaff);
 
 // Auth / Profile
-router.get('/auth/me',                     getMyProfile);
-router.put('/profile',                     updateMyProfile);
-router.put('/auth/change-password',        changeMyPassword);
+router.get('/auth/me',                                   getMyProfile);
+router.get('/school-info',                               getSchoolInfo);
+router.get('/academic-years',                            getAcademicYearsForStaff);
+router.put('/profile',                                   updateMyProfile);
+router.put('/profile/photo', uploadStaffPhoto.single('photo'), updateStaffPhoto);
+router.put('/auth/change-password',                      changeMyPassword);
 
 // Classes
 router.get('/classes',                          getMyClasses);
@@ -92,5 +102,10 @@ router.get('/reports',                          getMyMonthlyReports);
 
 // Salary (view-only)
 router.get('/salary',                           getMySalaryHistory);
+
+// Notices (view-only)
+router.get('/notices/unread-count',             getUnreadNoticeCount);
+router.get('/notices',                          getMyNotices);
+router.post('/notices/mark-read',               markNoticesRead);
 
 export default router;
