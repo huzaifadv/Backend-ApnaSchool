@@ -17,6 +17,8 @@ import {
   updateSchoolPlan,
   updateBillingCycle,
   sendNoticeToSchool,
+  getSuperAdminNotices,
+  deleteSuperAdminNotice,
   getPendingPayments,
   markSchoolAsPaid,
   getPaymentHistory,
@@ -55,7 +57,9 @@ router.put('/schools/:id/fbr-toggle', superAdminAuth, toggleFBRIntegration);
 router.delete('/schools/:schoolId', superAdminAuth, deleteSchool);
 
 // Notices
+router.get('/notices', superAdminAuth, getSuperAdminNotices);
 router.post('/notices', superAdminAuth, sendNoticeToSchool);
+router.delete('/notices/:id', superAdminAuth, deleteSuperAdminNotice);
 
 // Admin Management
 router.get('/admins', superAdminAuth, getAllAdmins);

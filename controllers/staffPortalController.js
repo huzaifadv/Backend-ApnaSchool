@@ -1030,6 +1030,7 @@ export const getMyNotices = async (req, res) => {
 
     const filter = {
       isActive: true,
+      isSuperAdminNotice: { $ne: true },
       $or: [
         { targetAudience: 'all' },
         { targetAudience: 'staff' },
@@ -1088,6 +1089,7 @@ export const getUnreadNoticeCount = async (req, res) => {
     const now = new Date();
     const count = await Notice.countDocuments({
       isActive: true,
+      isSuperAdminNotice: { $ne: true },
       _id: { $nin: readIds },
       $or: [
         { targetAudience: 'all' },

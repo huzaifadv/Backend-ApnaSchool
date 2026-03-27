@@ -171,7 +171,7 @@ export const getStudentNotices = async (req, res, next) => {
     }
 
     // Fetch all active notices (lean, no populate)
-    const allNotices = await Notice.find({ isActive: true })
+    const allNotices = await Notice.find({ isActive: true, isSuperAdminNotice: { $ne: true } })
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();

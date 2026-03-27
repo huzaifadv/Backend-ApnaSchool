@@ -6,7 +6,8 @@ import {
   getNoticeById,
   updateNotice,
   deleteNotice,
-  permanentDeleteNotice
+  permanentDeleteNotice,
+  getSuperAdminNoticeCount,
 } from '../controllers/tenantNoticeController.js';
 import { extractSchoolId, validateSchool } from '../middleware/tenantMiddleware.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -117,6 +118,8 @@ const noticeUpdateValidation = [
 ];
 
 // Routes
+router.get('/super-admin-count', getSuperAdminNoticeCount);
+
 router.route('/')
   .post(uploadGeneral.array('attachments', 5), noticeCreateValidation, createNotice)
   .get(getNotices);

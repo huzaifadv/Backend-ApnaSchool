@@ -4,6 +4,7 @@ import School from '../models/School.js';
 import Admin from '../models/Admin.js';
 import Student from '../models/Student.js';
 import { getModel } from '../models/dynamicModels.js';
+import SuperAdminNotice from '../models/SuperAdminNotice.js';
 
 /**
  * Generate JWT token for Super Admin
@@ -1177,55 +1178,89 @@ const updateBillingCycle = async (req, res) => {
  */
 const sendNoticeToSchool = async (req, res) => {
   try {
-    const { schoolId, title, description } = req.body;
+    const { title, content, targetAll, schoolIds } = req.body;
 
-    // Validate required fields
-    if (!schoolId || !title || !description) {
-      return res.status(400).json({
-        success: false,
-        message: 'School, title, and description are required',
-      });
+    if (!title || !content) {
+      return res.status(400).json({ success: false, message: 'Title and content are required' });
+    }
+    if (!targetAll && (!schoolIds || !schoolIds.length)) {
+      return res.status(400).json({ success: false, message: 'Select at least one school or target all' });
     }
 
-    // Check if school exists
-    const school = await School.findById(schoolId);
-    if (!school) {
-      return res.status(404).json({
-        success: false,
-        message: 'School not found',
-      });
+    // Determine target schools
+    let schools;
+    if (targetAll) {
+      schools = await School.find({ approvalStatus: 'approved' }).select('_id schoolName');
+    } else {
+      schools = await School.find({ _id: { $in: schoolIds }, approvalStatus: 'approved' }).select('_id schoolName');
     }
 
-    // Get the dynamic Notice model for the school
-    const Notice = getModel(schoolId, 'Notice');
+    if (!schools.length) {
+      return res.status(404).json({ success: false, message: 'No valid schools found' });
+    }
 
-    // Create the notice
-    const notice = await Notice.create({
-      schoolId: schoolId,
+    // Save to main DB as a record
+    const superAdminNotice = await SuperAdminNotice.create({
       title,
-      description,
-      category: 'General',
-      priority: 'High',
-      targetAudience: 'All',
-      postedBy: null, // Posted by super admin
-      isSuperAdminNotice: true,
-      isActive: true,
-      isPinned: true,
-      validFrom: new Date(),
-      validUntil: null,
+      content,
+      targetAll: !!targetAll,
+      targetSchools: schools.map(s => s._id),
     });
 
-    res.status(201).json({
-      success: true,
-      message: 'Notice sent to school successfully',
-      data: notice,
-    });
+    // Push to each school's tenant DB
+    await Promise.all(schools.map(async (school) => {
+      try {
+        const Notice = await getModel(school._id.toString(), 'notices');
+        await Notice.create({ title, content, isSuperAdminNotice: true, targetAudience: 'all', isActive: true, priority: 'high' });
+      } catch (err) {
+        console.error(`Failed to push notice to school ${school._id}:`, err.message);
+      }
+    }));
+
+    res.status(201).json({ success: true, message: `Notice sent to ${schools.length} school(s)`, data: superAdminNotice });
   } catch (error) {
     console.error('Send Notice Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error sending notice',
-    });
+    res.status(500).json({ success: false, message: 'Server error sending notice' });
+  }
+};
+
+const getSuperAdminNotices = async (req, res) => {
+  try {
+    const notices = await SuperAdminNotice.find()
+      .sort({ createdAt: -1 })
+      .populate('targetSchools', 'schoolName');
+    res.json({ success: true, data: notices });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const deleteSuperAdminNotice = async (req, res) => {
+  try {
+    const notice = await SuperAdminNotice.findByIdAndDelete(req.params.id);
+    if (!notice) return res.status(404).json({ success: false, message: 'Notice not found' });
+
+    // Determine which schools to clean up
+    let schools;
+    if (notice.targetAll) {
+      schools = await School.find({ approvalStatus: 'approved' }).select('_id');
+    } else {
+      schools = notice.targetSchools.map(id => ({ _id: id }));
+    }
+
+    // Delete from each school's tenant DB
+    await Promise.all(schools.map(async (school) => {
+      try {
+        const Notice = await getModel(school._id.toString(), 'notices');
+        await Notice.deleteMany({ title: notice.title, isSuperAdminNotice: true });
+      } catch (err) {
+        console.error(`Failed to delete notice from school ${school._id}:`, err.message);
+      }
+    }));
+
+    res.json({ success: true, message: 'Notice deleted from all schools' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -1582,6 +1617,8 @@ export {
   updateSchoolPlan,
   updateBillingCycle,
   sendNoticeToSchool,
+  getSuperAdminNotices,
+  deleteSuperAdminNotice,
   getPendingPayments,
   markSchoolAsPaid,
   getPaymentHistory,

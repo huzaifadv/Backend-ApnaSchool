@@ -11,6 +11,19 @@ import { getModel } from '../models/dynamicModels.js';
  * @route   POST /api/admin/notices
  * @access  Private (Admin only)
  */
+export const getSuperAdminNoticeCount = async (req, res) => {
+  try {
+    const Notice = await getModel(req.schoolId, 'notices');
+    const since = req.query.since ? new Date(req.query.since) : null;
+    const query = { isSuperAdminNotice: true, isActive: true };
+    if (since) query.createdAt = { $gt: since };
+    const count = await Notice.countDocuments(query);
+    res.json({ success: true, count });
+  } catch (error) {
+    res.status(500).json({ success: false, count: 0 });
+  }
+};
+
 export const createNotice = async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -111,13 +124,20 @@ export const createNotice = async (req, res, next) => {
  */
 export const getNotices = async (req, res, next) => {
   try {
-    const { priority, targetAudience, isActive, classId } = req.query;
+    const { priority, targetAudience, isActive, classId, superAdminOnly } = req.query;
 
     const Notice = await getModel(req.schoolId, 'notices');
     const Admin = await getModel(req.schoolId, 'admins'); // Load Admin model for populate
     const Class = await getModel(req.schoolId, 'classes'); // Load Class model for populate
 
     const filter = {};
+
+    // Super admin notices are a separate flow — exclude from regular list unless explicitly requested
+    if (superAdminOnly === 'true') {
+      filter.isSuperAdminNotice = true;
+    } else {
+      filter.isSuperAdminNotice = { $ne: true };
+    }
 
     if (priority) filter.priority = priority;
     if (targetAudience) filter.targetAudience = targetAudience;

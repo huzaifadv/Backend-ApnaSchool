@@ -354,6 +354,10 @@ const noticeSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isSuperAdminNotice: {
+    type: Boolean,
+    default: false
+  },
   expiryDate: {
     type: Date
   }
