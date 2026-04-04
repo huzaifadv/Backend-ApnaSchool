@@ -92,9 +92,10 @@ const corsOptions = {
     const allowedOrigins = process.env.NODE_ENV === 'production'
       ? [
           process.env.FRONTEND_URL,
-          'https://app.apnaschooledu.com', // Production frontend
-          'https://apnaschooledu.com', // Non-www version
-          'https://www.apnaschooledu.com' // www version
+          'https://apnaschooledu.com',       // Non-www version
+          'https://www.apnaschooledu.com',   // www version
+          'https://app.apnaschooledu.com',   // App subdomain
+          'https://api.apnaschooledu.com'    // API subdomain
         ].filter(Boolean)
       : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'];
 
@@ -112,6 +113,9 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests for all routes
+app.options('*', cors(corsOptions));
 
 // Body parsing middleware with size limits
 app.use(express.json({ limit: '10mb' }));
