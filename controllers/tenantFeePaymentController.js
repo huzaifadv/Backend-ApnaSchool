@@ -1285,15 +1285,19 @@ export const getFeeAnalytics = async (req, res, next) => {
     const allPayments = await FeePayment.find({}).lean();
     const allStudents = await Student.find({}).select('monthlyFee totalMonthlyFee').lean();
 
+    // Only count payments belonging to currently active (existing) students
+    const activeStudentIds = new Set(allStudents.map(s => s._id.toString()));
+    const validPayments = allPayments.filter(p => p.studentId && activeStudentIds.has(p.studentId.toString()));
+
     // Sum of all students' monthly fees (total expected per month)
     const totalMonthlyFees = allStudents.reduce((s, st) => s + (st.totalMonthlyFee || st.monthlyFee || 0), 0);
 
-    const totalCollected = allPayments.reduce((s, p) => s + (p.amountPaid || 0), 0);
-    const totalPending   = allPayments.reduce((s, p) => s + (p.remainingAmount || 0), 0);
+    const totalCollected = validPayments.reduce((s, p) => s + (p.amountPaid || 0), 0);
+    const totalPending   = validPayments.reduce((s, p) => s + Math.max(0, p.remainingAmount || 0), 0);
     const totalStudents  = allStudents.length;
-    const paidCount      = allPayments.filter(p => p.status === 'Paid').length;
-    const partialCount   = allPayments.filter(p => p.status === 'Partial').length;
-    const pendingCount   = allPayments.filter(p => p.status === 'Pending').length;
+    const paidCount      = validPayments.filter(p => p.status === 'Paid').length;
+    const partialCount   = validPayments.filter(p => p.status === 'Partial').length;
+    const pendingCount   = validPayments.filter(p => p.status === 'Pending').length;
 
     // Last 12 months monthly breakdown
     const now = new Date();
@@ -1302,13 +1306,13 @@ export const getFeeAnalytics = async (req, res, next) => {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const m = d.getMonth() + 1;
       const y = d.getFullYear();
-      const recs = allPayments.filter(p => p.month === m && p.year === y);
+      const recs = validPayments.filter(p => p.month === m && p.year === y);
       monthly.push({
         label: d.toLocaleString('default', { month: 'short' }) + ' ' + String(y).slice(2),
         month: m,
         year: y,
         collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
-        pending:   Math.round(recs.reduce((s, p) => s + (p.remainingAmount || 0), 0)),
+        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, p.remainingAmount || 0), 0)),
         count:     recs.length,
       });
     }
@@ -1316,13 +1320,14 @@ export const getFeeAnalytics = async (req, res, next) => {
     // Per-class breakdown
     const classes = await Class.find({}).select('className section').lean();
     const classSummary = await Promise.all(classes.map(async (cls) => {
-      const studs = await Student.find({ classId: cls._id }).select('_id').lean();
-      const ids   = new Set(studs.map(s => s._id.toString()));
-      const recs  = allPayments.filter(p => p.studentId && ids.has(p.studentId.toString()));
+      const studs    = await Student.find({ classId: cls._id }).select('_id').lean();
+      const clsIdStr = cls._id.toString();
+      // Use classId on the payment record directly, only for active students
+      const recs = validPayments.filter(p => p.classId && p.classId.toString() === clsIdStr);
       return {
         className: `${cls.className}-${cls.section}`,
         collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
-        pending:   Math.round(recs.reduce((s, p) => s + (p.remainingAmount || 0), 0)),
+        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, p.remainingAmount || 0), 0)),
         students:  studs.length,
       };
     }));
