@@ -10,12 +10,16 @@ import {
   getClassStats
 } from '../controllers/tenantClassController.js';
 import { extractSchoolId, validateSchool } from '../middleware/tenantMiddleware.js';
+import { protect, authorize } from '../middleware/authMiddleware.js';
+import { validateAcademicYearExists, getAcademicYearsForDropdown } from '../middleware/academicYearValidation.js';
 
 const router = express.Router();
 
-// All class routes require tenant authentication
+// All class routes require tenant authentication & admin authorization
 router.use(extractSchoolId);
 router.use(validateSchool);
+router.use(protect);
+router.use(authorize('admin', 'super_admin'));
 
 // Validation rules for class creation
 const classCreateValidation = [
@@ -80,7 +84,7 @@ const classUpdateValidation = [
 
 // Routes
 router.route('/')
-  .post(classCreateValidation, createClass)
+  .post(validateAcademicYearExists, classCreateValidation, createClass)
   .get(getClasses);
 
 router.route('/:id')
@@ -90,5 +94,8 @@ router.route('/:id')
 
 router.delete('/:id/permanent', permanentDeleteClass);
 router.get('/:id/stats', getClassStats);
+
+// Get academic years dropdown
+router.get('/dropdown/academic-years', getAcademicYearsForDropdown);
 
 export default router;
