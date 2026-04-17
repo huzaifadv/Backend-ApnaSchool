@@ -27,6 +27,10 @@ const studentSchema = new mongoose.Schema({
     required: [true, 'Roll number is required'],
     trim: true
   },
+  studentId: {
+    type: String,
+    trim: true
+  },
   fullName: {
     type: String,
     required: [true, 'Full name is required'],
@@ -128,6 +132,10 @@ const studentSchema = new mongoose.Schema({
     type: String,
     enum: ['active', 'passedOut', 'inactive'],
     default: 'active'
+  },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-student.png'
   },
   enrollmentHistory: [{
     academicYear: {

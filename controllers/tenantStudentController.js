@@ -389,8 +389,10 @@ export const deleteStudent = async (req, res, next) => {
 
     // PERMANENT DELETE: Remove from database completely
     // Delete all related data
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
     await Attendance.deleteMany({ studentId: req.params.id });
     await Report.deleteMany({ studentId: req.params.id });
+    await FeePayment.deleteMany({ studentId: req.params.id });
 
     // Permanently delete the student from database
     await Student.findByIdAndDelete(req.params.id);
@@ -417,7 +419,11 @@ export const deleteStudent = async (req, res, next) => {
  */
 export const permanentDeleteStudent = async (req, res, next) => {
   try {
-    const Student = await getModel(req.schoolId, 'students');
+    const Student    = await getModel(req.schoolId, 'students');
+    const Attendance = await getModel(req.schoolId, 'attendance');
+    const Report     = await getModel(req.schoolId, 'reports');
+    const FeePayment = await getModel(req.schoolId, 'feepayments');
+
     const student = await Student.findByIdAndDelete(req.params.id);
 
     if (!student) {
@@ -426,6 +432,10 @@ export const permanentDeleteStudent = async (req, res, next) => {
         message: 'Student not found'
       });
     }
+
+    await Attendance.deleteMany({ studentId: req.params.id });
+    await Report.deleteMany({ studentId: req.params.id });
+    await FeePayment.deleteMany({ studentId: req.params.id });
 
     res.status(200).json({
       success: true,
