@@ -11,6 +11,7 @@ import express from 'express';
 import { body, param } from 'express-validator';
 import { protect } from '../middleware/authMiddleware.js';
 import { uploadStaffPhoto } from '../config/multer.js';
+import { staffUpload } from '../middleware/uploadProfile.js';
 import {
   createStaff,
   getAllStaff,
@@ -115,38 +116,38 @@ const salaryValidation = [
 router.use(protect);
 
 // Staff CRUD
-router.post('/',           uploadStaffPhoto.single('photo'), createStaffValidation, createStaff);
-router.get('/',            getAllStaff);
-router.get('/:id',         getStaffById);
-router.put('/:id',         uploadStaffPhoto.single('photo'), updateStaffValidation, updateStaff);
+router.post('/', staffUpload.upload.single('profilePicture'), staffUpload.processImage, createStaffValidation, createStaff);
+router.get('/', getAllStaff);
+router.get('/:id', getStaffById);
+router.put('/:id', staffUpload.upload.single('profilePicture'), staffUpload.processImage, updateStaffValidation, updateStaff);
 
 // Class & subject assignment
-router.put('/:id/assign',  assignClassesAndSubjects);
+router.put('/:id/assign', assignClassesAndSubjects);
 
 // Password reset (admin action)
 router.put('/:id/reset-password', resetStaffPassword);
 
 // Toggle active/inactive status
-router.put('/:id/toggle-status',  toggleStaffStatus);
+router.put('/:id/toggle-status', toggleStaffStatus);
 
 // Delete staff permanently
 router.delete('/:id', deleteStaff);
 
 // Salary management
-router.post('/:id/salary',                              salaryValidation, addSalaryRecord);
-router.get('/:id/salary',                               getStaffSalaryHistory);
-router.put('/:id/salary/:salaryId',                     updateSalaryRecord);
-router.delete('/:id/salary/:salaryId',                  deleteSalaryRecord);
-router.put('/:id/salary/:salaryId/toggle-status',       toggleSalaryStatus);
-router.post('/:id/salary/:salaryId/invoice',            createSalaryInvoice);
+router.post('/:id/salary', salaryValidation, addSalaryRecord);
+router.get('/:id/salary', getStaffSalaryHistory);
+router.put('/:id/salary/:salaryId', updateSalaryRecord);
+router.delete('/:id/salary/:salaryId', deleteSalaryRecord);
+router.put('/:id/salary/:salaryId/toggle-status', toggleSalaryStatus);
+router.post('/:id/salary/:salaryId/invoice', createSalaryInvoice);
 
 // Self-attendance verification
 // NOTE: these routes must come BEFORE /:id routes to avoid param collision
-router.get('/attendance/pending',                  getPendingAttendance);
-router.put('/attendance/:attendanceId/verify',     verifyStaffAttendance);
+router.get('/attendance/pending', getPendingAttendance);
+router.put('/attendance/:attendanceId/verify', verifyStaffAttendance);
 
 // Overview endpoints for admin
-router.get('/overview/marks',   getAllStaffMarks);
+router.get('/overview/marks', getAllStaffMarks);
 router.get('/overview/reports', getAllStaffMonthlyReports);
 
 export default router;

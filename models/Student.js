@@ -107,6 +107,10 @@ const studentSchema = new mongoose.Schema({
     enum: ['active', 'passedOut', 'inactive'],
     default: 'active'
   },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-student.png'
+  },
   enrollmentHistory: [{
     academicYear: {
       type: String,

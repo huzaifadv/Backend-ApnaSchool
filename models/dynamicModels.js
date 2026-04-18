@@ -129,6 +129,10 @@ const studentSchema = new mongoose.Schema({
     enum: ['active', 'passedOut', 'inactive'],
     default: 'active'
   },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-student.png'
+  },
   enrollmentHistory: [{
     academicYear: {
       type: String,
@@ -242,6 +246,10 @@ const adminSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-admin.png'
   },
   // Email Verification Fields (Feature 1)
   isEmailVerified: {
@@ -562,6 +570,10 @@ const teacherSchema = new mongoose.Schema({
   },
   profileImage: {
     type: String
+  },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-staff.png'
   }
 }, {
   timestamps: true
@@ -774,15 +786,15 @@ const feePaymentSchema = new mongoose.Schema({
   // Total Calculation (Enhanced to include all components)
   totalAmount: {
     type: Number,
-    default: function() {
+    default: function () {
       // Calculate base from feeBreakdown if available, otherwise use legacy amount
       let base = this.amount || 0;
       if (this.feeBreakdown) {
         const breakdown = this.feeBreakdown;
         base = (breakdown.tuitionFee || 0) +
-               (breakdown.fundFee || 0) +
-               (breakdown.hostelFee || 0) +
-               (breakdown.transportFee || 0);
+          (breakdown.fundFee || 0) +
+          (breakdown.hostelFee || 0) +
+          (breakdown.transportFee || 0);
       }
 
       // Add extra charges
@@ -806,7 +818,7 @@ const feePaymentSchema = new mongoose.Schema({
   },
   remainingAmount: {
     type: Number,
-    default: function() {
+    default: function () {
       const total = this.totalAmount || this.amount || 0;
       return total - (this.amountPaid || 0);
     }
@@ -1121,7 +1133,7 @@ const staffSchema = new mongoose.Schema({
       ref: 'Class'
     },
     className: { type: String, trim: true },
-    section:   { type: String, trim: true },
+    section: { type: String, trim: true },
     subjects: [{
       type: String,
       trim: true
@@ -1162,6 +1174,10 @@ const staffSchema = new mongoose.Schema({
   },
   profileImage: {
     type: String
+  },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-staff.png'
   },
   readNotices: [{
     type: mongoose.Schema.Types.ObjectId,
