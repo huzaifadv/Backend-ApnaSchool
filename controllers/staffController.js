@@ -13,6 +13,7 @@ import bcrypt from 'bcryptjs';
 import { validationResult } from 'express-validator';
 import { getModel } from '../models/dynamicModels.js';
 import School from '../models/School.js';
+import { resolveAcademicYear } from '../utils/academicYearResolver.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,9 @@ export const createStaff = async (req, res) => {
       role,
       baseSalary,
       salaryDueDate,
-      password
+      password,
+      academicYear,
+      academicYearId
     } = req.body;
 
     const Staff = await getModel(req.schoolId, 'staffs');
@@ -89,6 +92,14 @@ export const createStaff = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
+    const yearDoc = await resolveAcademicYear(req.schoolId, { academicYearId, academicYear });
+    if (!yearDoc) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a valid academic year'
+      });
+    }
+
     const staff = await Staff.create({
       staffId,
       name,
@@ -96,6 +107,8 @@ export const createStaff = async (req, res) => {
       contact,
       qualification,
       joiningDate: joiningDate || Date.now(),
+      academicYear: yearDoc.year,
+      academicYearId: yearDoc._id,
       status: status || 'active',
       role: role || 'teacher',
       baseSalary: Number(baseSalary) || 0,
@@ -132,13 +145,14 @@ export const createStaff = async (req, res) => {
  */
 export const getAllStaff = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, role, search } = req.query;
+    const { page = 1, limit = 20, status, role, search, academicYearId } = req.query;
 
     const Staff = await getModel(req.schoolId, 'staffs');
 
     const query = {};
     if (status)  query.status = status;
     if (role)    query.role   = role;
+    if (academicYearId) query.academicYearId = academicYearId;
     if (search) {
       query.$or = [
         { name:    { $regex: search, $options: 'i' } },
@@ -230,6 +244,21 @@ export const updateStaff = async (req, res) => {
 
     // Prevent client from changing staffId or password through this endpoint
     const { staffId: _staffId, password: _pw, ...updateData } = req.body;
+
+    if (updateData.academicYearId || updateData.academicYear) {
+      const yearDoc = await resolveAcademicYear(req.schoolId, {
+        academicYearId: updateData.academicYearId,
+        academicYear: updateData.academicYear
+      });
+      if (!yearDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please select a valid academic year'
+        });
+      }
+      updateData.academicYearId = yearDoc._id;
+      updateData.academicYear = yearDoc.year;
+    }
 
     if (req.file?.path) {
       updateData.profileImage = req.file.path;

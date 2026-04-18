@@ -9,6 +9,7 @@
     "dev": "cross-env NODE_ENV=development nodemon server.js",
     "seed": "node seed.js",
     "migrate-fees": "node scripts/migrateFeeData.js",
+    "migrate-academic-year-ids": "node scripts/migrateAcademicYearIds.js",
     "prod": "cross-env NODE_ENV=production node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

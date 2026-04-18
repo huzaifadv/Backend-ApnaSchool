@@ -1,5 +1,6 @@
 import { validationResult } from 'express-validator';
 import { getModel } from '../models/dynamicModels.js';
+import { resolveAcademicYear } from '../utils/academicYearResolver.js';
 
 /**
  * Tenant-aware Class Controller
@@ -27,10 +28,19 @@ export const createClass = async (req, res, next) => {
       section,
       grade,
       academicYear,
+      academicYearId,
       classTeacher,
       room,
       capacity
     } = req.body;
+
+    const yearDoc = await resolveAcademicYear(req.schoolId, { academicYearId, academicYear });
+    if (!yearDoc) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a valid academic year'
+      });
+    }
 
     // Get Class model from tenant database
     const Class = await getModel(req.schoolId, 'classes');
@@ -39,7 +49,7 @@ export const createClass = async (req, res, next) => {
     const existingClass = await Class.findOne({
       className,
       section: section ? section.toUpperCase() : '',
-      academicYear
+      academicYearId: yearDoc._id
     });
 
     if (existingClass) {
@@ -54,7 +64,8 @@ export const createClass = async (req, res, next) => {
       className,
       section: section ? section.toUpperCase() : '',
       grade,
-      academicYear,
+      academicYear: yearDoc.year,
+      academicYearId: yearDoc._id,
       classTeacher,
       room,
       capacity
@@ -78,7 +89,7 @@ export const createClass = async (req, res, next) => {
  */
 export const getClasses = async (req, res, next) => {
   try {
-    const { academicYear, grade, isActive } = req.query;
+    const { academicYear, academicYearId, grade, isActive } = req.query;
 
     // Get models from tenant database
     const Class = await getModel(req.schoolId, 'classes');
@@ -87,7 +98,9 @@ export const getClasses = async (req, res, next) => {
     // Build filter (no schoolId needed - tenant database is isolated)
     const filter = {};
 
-    if (academicYear) {
+    if (academicYearId) {
+      filter.academicYearId = academicYearId;
+    } else if (academicYear) {
       filter.academicYear = academicYear;
     }
 
@@ -214,18 +227,36 @@ export const updateClass = async (req, res, next) => {
       });
     }
 
+    const updateData = { ...req.body };
+
+    if (updateData.academicYearId || updateData.academicYear) {
+      const yearDoc = await resolveAcademicYear(req.schoolId, {
+        academicYearId: updateData.academicYearId,
+        academicYear: updateData.academicYear
+      });
+      if (!yearDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please select a valid academic year'
+        });
+      }
+      updateData.academicYearId = yearDoc._id;
+      updateData.academicYear = yearDoc.year;
+    }
+
     // If updating class name, section, or academic year, check for duplicates
+    const targetAcademicYearId = updateData.academicYearId || classDoc.academicYearId;
     if (
-      (req.body.className || req.body.section || req.body.academicYear) &&
-      (req.body.className !== classDoc.className ||
-        req.body.section?.toUpperCase() !== classDoc.section ||
-        req.body.academicYear !== classDoc.academicYear)
+      (updateData.className || updateData.section || updateData.academicYearId || updateData.academicYear) &&
+      (updateData.className !== classDoc.className ||
+        updateData.section?.toUpperCase() !== classDoc.section ||
+        targetAcademicYearId?.toString() !== classDoc.academicYearId?.toString())
     ) {
       const existingClass = await Class.findOne({
         _id: { $ne: req.params.id },
-        className: req.body.className || classDoc.className,
-        section: req.body.section?.toUpperCase() || classDoc.section,
-        academicYear: req.body.academicYear || classDoc.academicYear
+        className: updateData.className || classDoc.className,
+        section: updateData.section?.toUpperCase() || classDoc.section,
+        academicYearId: targetAcademicYearId
       });
 
       if (existingClass) {
@@ -237,14 +268,14 @@ export const updateClass = async (req, res, next) => {
     }
 
     // Convert section to uppercase if provided
-    if (req.body.section) {
-      req.body.section = req.body.section.toUpperCase();
+    if (updateData.section) {
+      updateData.section = updateData.section.toUpperCase();
     }
 
     // Update class
     const updatedClass = await Class.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       {
         new: true,
         runValidators: true

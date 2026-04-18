@@ -11,6 +11,7 @@ import express from 'express';
 import { body, param } from 'express-validator';
 import { protect } from '../middleware/authMiddleware.js';
 import { uploadStaffPhoto } from '../config/multer.js';
+import { validateAcademicYearExists } from '../middleware/academicYearValidation.js';
 import {
   createStaff,
   getAllStaff,
@@ -60,7 +61,12 @@ const createStaffValidation = [
   body('baseSalary')
     .optional()
     .isFloat({ min: 0 })
-    .withMessage('Salary must be a positive number')
+    .withMessage('Salary must be a positive number'),
+
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid')
 ];
 
 const updateStaffValidation = [
@@ -79,7 +85,12 @@ const updateStaffValidation = [
   body('role')
     .optional()
     .isIn(['teacher', 'coordinator', 'admin_staff'])
-    .withMessage('Invalid role')
+    .withMessage('Invalid role'),
+
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid')
 ];
 
 const salaryValidation = [
@@ -115,7 +126,7 @@ const salaryValidation = [
 router.use(protect);
 
 // Staff CRUD
-router.post('/',           uploadStaffPhoto.single('photo'), createStaffValidation, createStaff);
+router.post('/',           validateAcademicYearExists, uploadStaffPhoto.single('photo'), createStaffValidation, createStaff);
 router.get('/',            getAllStaff);
 router.get('/:id',         getStaffById);
 router.put('/:id',         uploadStaffPhoto.single('photo'), updateStaffValidation, updateStaff);

@@ -88,9 +88,13 @@ const studentCreateValidation = [
     .normalizeEmail(),
 
   body('currentAcademicYear')
-    .trim()
-    .notEmpty()
-    .withMessage('Academic year is required')
+    .optional()
+    .trim(),
+
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid')
 ];
 
 // Validation rules for student update
@@ -117,6 +121,11 @@ const studentUpdateValidation = [
     .optional()
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters'),
+
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid'),
 
   body('gender')
     .optional()
