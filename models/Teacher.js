@@ -94,6 +94,10 @@ const teacherSchema = new mongoose.Schema({
   },
   profileImage: {
     type: String
+  },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-staff.png'
   }
 }, {
   timestamps: true
@@ -103,7 +107,7 @@ const teacherSchema = new mongoose.Schema({
 teacherSchema.index({ schoolId: 1, employeeId: 1 }, { unique: true });
 
 // Virtual for calculating age
-teacherSchema.virtual('age').get(function() {
+teacherSchema.virtual('age').get(function () {
   if (this.dateOfBirth) {
     const today = new Date();
     const birthDate = new Date(this.dateOfBirth);

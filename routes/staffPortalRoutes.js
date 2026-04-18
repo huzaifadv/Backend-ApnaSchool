@@ -12,6 +12,7 @@ import express from 'express';
 import { body } from 'express-validator';
 import { protectStaff } from '../middleware/staffAuthMiddleware.js';
 import { uploadStaffPhoto } from '../config/multer.js';
+import { staffUpload } from '../middleware/uploadProfile.js';
 import {
   staffLogin,
   getMyProfile,
@@ -64,48 +65,48 @@ router.post('/auth/login', loginValidation, staffLogin);
 router.use(protectStaff);
 
 // Auth / Profile
-router.get('/auth/me',                                   getMyProfile);
-router.get('/school-info',                               getSchoolInfo);
-router.get('/academic-years',                            getAcademicYearsForStaff);
-router.put('/profile',                                   updateMyProfile);
-router.put('/profile/photo', uploadStaffPhoto.single('photo'), updateStaffPhoto);
-router.put('/auth/change-password',                      changeMyPassword);
+router.get('/auth/me', getMyProfile);
+router.get('/school-info', getSchoolInfo);
+router.get('/academic-years', getAcademicYearsForStaff);
+router.put('/profile', updateMyProfile);
+router.put('/profile/photo', staffUpload.upload.single('profilePicture'), staffUpload.processImage, updateStaffPhoto);
+router.put('/auth/change-password', changeMyPassword);
 
 // Classes
-router.get('/classes',                          getMyClasses);
-router.get('/all-classes',                      getAllSchoolClasses);
-router.get('/classes/:classId/students',        getClassStudents);
+router.get('/classes', getMyClasses);
+router.get('/all-classes', getAllSchoolClasses);
+router.get('/classes/:classId/students', getClassStudents);
 
 // Class Attendance (staff marks student attendance)
-router.post('/class-attendance',                markClassAttendance);
-router.put('/class-attendance',                 updateClassAttendance);
-router.get('/class-attendance/:classId',        getMyClassAttendance);
+router.post('/class-attendance', markClassAttendance);
+router.put('/class-attendance', updateClassAttendance);
+router.get('/class-attendance/:classId', getMyClassAttendance);
 
 // Self Attendance (staff marks own attendance — admin verifies)
-router.post('/self-attendance',                 markSelfAttendance);
-router.get('/self-attendance',                  getMySelfAttendance);
+router.post('/self-attendance', markSelfAttendance);
+router.get('/self-attendance', getMySelfAttendance);
 
 // Diary / Homework
-router.post('/diary',                           createDiaryEntry);
-router.get('/diary',                            getMyDiaryEntries);
-router.put('/diary/:id',                        updateDiaryEntry);
-router.delete('/diary/:id',                     deleteDiaryEntry);
+router.post('/diary', createDiaryEntry);
+router.get('/diary', getMyDiaryEntries);
+router.put('/diary/:id', updateDiaryEntry);
+router.delete('/diary/:id', deleteDiaryEntry);
 
 // Marks Entry
-router.post('/marks',                           addMarksEntry);
-router.get('/marks',                            getMyMarks);
-router.put('/marks/:id',                        updateMarksEntry);
+router.post('/marks', addMarksEntry);
+router.get('/marks', getMyMarks);
+router.put('/marks/:id', updateMarksEntry);
 
 // Monthly Reports
-router.post('/reports',                         submitMonthlyReport);
-router.get('/reports',                          getMyMonthlyReports);
+router.post('/reports', submitMonthlyReport);
+router.get('/reports', getMyMonthlyReports);
 
 // Salary (view-only)
-router.get('/salary',                           getMySalaryHistory);
+router.get('/salary', getMySalaryHistory);
 
 // Notices (view-only)
-router.get('/notices/unread-count',             getUnreadNoticeCount);
-router.get('/notices',                          getMyNotices);
-router.post('/notices/mark-read',               markNoticesRead);
+router.get('/notices/unread-count', getUnreadNoticeCount);
+router.get('/notices', getMyNotices);
+router.post('/notices/mark-read', markNoticesRead);
 
 export default router;
