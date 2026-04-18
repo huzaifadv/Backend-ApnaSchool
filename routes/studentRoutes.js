@@ -10,13 +10,17 @@ import {
   migrateStudentData
 } from '../controllers/tenantStudentController.js';
 import { extractSchoolId, validateSchool } from '../middleware/tenantMiddleware.js';
+import { protect, authorize } from '../middleware/authMiddleware.js';
+import { validateAcademicYearExists } from '../middleware/academicYearValidation.js';
 import { studentUpload } from '../middleware/uploadProfile.js';
 
 const router = express.Router();
 
-// All student routes require tenant authentication
+// All student routes require tenant authentication & admin authorization
 router.use(extractSchoolId);
 router.use(validateSchool);
+router.use(protect);
+router.use(authorize('admin', 'super_admin'));
 
 // Validation rules for student creation
 const studentCreateValidation = [
@@ -149,6 +153,7 @@ const studentUpdateValidation = [
 
 // Routes
 router.route('/')
+  .post(validateAcademicYearExists, studentCreateValidation, createStudent)
   .post(studentUpload.upload.single('profilePicture'), studentUpload.processImage, studentCreateValidation, createStudent)
   .get(getStudents);
 
