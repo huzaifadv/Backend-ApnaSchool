@@ -1,5 +1,6 @@
 import { getModel } from '../models/dynamicModels.js';
 import School from '../models/School.js';
+import { resolveAcademicYear } from '../utils/academicYearResolver.js';
 
 /**
  * Tenant-aware Dashboard Controller
@@ -7,6 +8,11 @@ import School from '../models/School.js';
 
 export const getDashboardStats = async (req, res, next) => {
   try {
+    const { academicYearId } = req.query;
+
+    const yearDoc = await resolveAcademicYear(req.schoolId, { academicYearId });
+    const academicYearFilter = yearDoc?._id ? { academicYearId: yearDoc._id } : {};
+
     // Get models from tenant database
     const Student = await getModel(req.schoolId, 'students');
     const Class = await getModel(req.schoolId, 'classes');
@@ -14,10 +20,10 @@ export const getDashboardStats = async (req, res, next) => {
     const Attendance = await getModel(req.schoolId, 'attendance');
 
     // Get total students count
-    const totalStudents = await Student.countDocuments({ isActive: true });
+    const totalStudents = await Student.countDocuments({ isActive: true, ...academicYearFilter });
 
     // Get total classes count
-    const totalClasses = await Class.countDocuments({ isActive: true });
+    const totalClasses = await Class.countDocuments({ isActive: true, ...academicYearFilter });
 
     // Get active notices count
     const today = new Date();
@@ -70,6 +76,10 @@ export const getDashboardStats = async (req, res, next) => {
 
 export const getRecentActivity = async (req, res, next) => {
   try {
+    const { academicYearId } = req.query;
+    const yearDoc = await resolveAcademicYear(req.schoolId, { academicYearId });
+    const academicYearFilter = yearDoc?._id ? { academicYearId: yearDoc._id } : {};
+
     const Notice = await getModel(req.schoolId, 'notices');
     const Student = await getModel(req.schoolId, 'students');
 
@@ -81,7 +91,7 @@ export const getRecentActivity = async (req, res, next) => {
       .populate('classId', 'className section');
 
     // Get recently added students
-    const recentStudents = await Student.find({ isActive: true })
+    const recentStudents = await Student.find({ isActive: true, ...academicYearFilter })
       .sort({ createdAt: -1 })
       .limit(5)
       .select('firstName lastName rollNumber classId')

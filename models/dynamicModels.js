@@ -124,6 +124,10 @@ const studentSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  academicYearId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AcademicYear'
+  },
   status: {
     type: String,
     enum: ['active', 'passedOut', 'inactive'],
@@ -179,6 +183,7 @@ const studentSchema = new mongoose.Schema({
 
 // Index for faster lookups within each tenant database
 studentSchema.index({ rollNumber: 1 });
+studentSchema.index({ academicYearId: 1 });
 
 // Class Schema
 const classSchema = new mongoose.Schema({
@@ -198,6 +203,10 @@ const classSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  academicYearId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AcademicYear'
+  },
   classTeacher: {
     type: String,
     trim: true
@@ -212,7 +221,7 @@ const classSchema = new mongoose.Schema({
 
 // Remove unique index since each tenant has its own database
 // Each school can have same class names independently
-classSchema.index({ className: 1, section: 1, academicYear: 1 });
+classSchema.index({ className: 1, section: 1, academicYearId: 1 });
 
 // Admin Schema
 const adminSchema = new mongoose.Schema({
@@ -1120,6 +1129,16 @@ const staffSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+  academicYear: {
+    type: String,
+    trim: true
+    // Format: YYYY-YYYY (e.g., 2024-2025)
+    // Tracks which academic year the staff member is active/assigned
+  },
+  academicYearId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AcademicYear'
+  },
   status: {
     type: String,
     enum: ['active', 'inactive'],
@@ -1189,6 +1208,7 @@ const staffSchema = new mongoose.Schema({
 
 // staffId already has unique: true in schema, no need for separate index
 staffSchema.index({ status: 1 });
+staffSchema.index({ academicYearId: 1 });
 
 // StaffSalaryHistory Schema
 const staffSalaryHistorySchema = new mongoose.Schema({

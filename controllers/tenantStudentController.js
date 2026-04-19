@@ -2,6 +2,7 @@ import { validationResult } from 'express-validator';
 import { getModel } from '../models/dynamicModels.js';
 import crypto from 'crypto';
 import School from '../models/School.js';
+import { resolveAcademicYear } from '../utils/academicYearResolver.js';
 
 /**
  * Tenant-aware Student Controller
@@ -76,7 +77,9 @@ export const createStudent = async (req, res, next) => {
       parentName,
       parentPhone,
       monthlyFee,
-      feeDueDate
+      feeDueDate,
+      currentAcademicYear,
+      academicYearId
     } = req.body;
 
     // Get models from tenant database
@@ -118,6 +121,17 @@ export const createStudent = async (req, res, next) => {
       });
     }
 
+    const yearDoc = classDoc.academicYearId
+      ? await resolveAcademicYear(req.schoolId, { academicYearId: classDoc.academicYearId })
+      : await resolveAcademicYear(req.schoolId, { academicYearId, academicYear: currentAcademicYear });
+
+    if (!yearDoc) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a valid academic year'
+      });
+    }
+
     // Normalize roll number: remove leading zeros for comparison (e.g. "01" == "1")
     const normalizedRollNumber = rollNumber.toString().replace(/^0+(\d)/, '$1');
 
@@ -150,6 +164,8 @@ export const createStudent = async (req, res, next) => {
       parentName,
       parentPhone,
       parentAccessCode,
+      currentAcademicYear: yearDoc.year,
+      academicYearId: yearDoc._id,
       monthlyFee: monthlyFee || 0,
       feeDueDate: feeDueDate || 1,
       ...(req.file && { profilePicture: req.file.path })
@@ -184,7 +200,7 @@ export const createStudent = async (req, res, next) => {
  */
 export const getStudents = async (req, res, next) => {
   try {
-    const { classId, isActive, search } = req.query;
+    const { classId, isActive, search, academicYearId, academicYear } = req.query;
 
     // Get models from tenant database
     const Student = await getModel(req.schoolId, 'students');
@@ -199,6 +215,12 @@ export const getStudents = async (req, res, next) => {
 
     if (isActive !== undefined) {
       filter.isActive = isActive === 'true';
+    }
+
+    if (academicYearId) {
+      filter.academicYearId = academicYearId;
+    } else if (academicYear) {
+      filter.currentAcademicYear = academicYear;
     }
 
     if (search) {
@@ -266,7 +288,7 @@ export const getStudentById = async (req, res, next) => {
     // Manually populate class data (multi-tenant safe)
     if (student.classId) {
       student.classId = await Class.findById(student.classId)
-        .select('className section grade academicYear')
+        .select('className section grade academicYear academicYearId')
         .lean();
     }
 
@@ -306,10 +328,12 @@ export const updateStudent = async (req, res, next) => {
       });
     }
 
+    const updateData = { ...req.body };
+
     // If updating classId, verify it exists in tenant database
     const targetClassId = req.body.classId || student.classId.toString();
+    const Class = await getModel(req.schoolId, 'classes');
     if (req.body.classId && req.body.classId !== student.classId.toString()) {
-      const Class = await getModel(req.schoolId, 'classes');
       const classDoc = await Class.findById(req.body.classId);
 
       if (!classDoc) {
@@ -317,6 +341,26 @@ export const updateStudent = async (req, res, next) => {
           success: false,
           message: 'Class not found in your school'
         });
+      }
+
+      if (classDoc.academicYearId) {
+        updateData.academicYearId = classDoc.academicYearId;
+        const yearDoc = await resolveAcademicYear(req.schoolId, { academicYearId: classDoc.academicYearId });
+        updateData.currentAcademicYear = yearDoc?.year || updateData.currentAcademicYear || '';
+      }
+    } else if (req.body.academicYearId) {
+      const yearDoc = await resolveAcademicYear(req.schoolId, { academicYearId: req.body.academicYearId });
+      if (!yearDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please select a valid academic year'
+        });
+      }
+      updateData.currentAcademicYear = yearDoc.year;
+    } else if (req.body.currentAcademicYear) {
+      const yearDoc = await resolveAcademicYear(req.schoolId, { academicYear: req.body.currentAcademicYear });
+      if (yearDoc) {
+        updateData.academicYearId = yearDoc._id;
       }
     }
 
@@ -347,7 +391,7 @@ export const updateStudent = async (req, res, next) => {
     // Update student
     const updatedStudent = await Student.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       {
         new: true,
         runValidators: true
@@ -357,7 +401,7 @@ export const updateStudent = async (req, res, next) => {
     // Manually populate class data (multi-tenant safe)
     if (updatedStudent && updatedStudent.classId) {
       updatedStudent.classId = await Class.findById(updatedStudent.classId)
-        .select('className section grade')
+        .select('className section grade academicYear academicYearId')
         .lean();
     }
 

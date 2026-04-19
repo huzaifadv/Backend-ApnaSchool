@@ -12,6 +12,7 @@ import { body, param } from 'express-validator';
 import { protect } from '../middleware/authMiddleware.js';
 import { uploadStaffPhoto } from '../config/multer.js';
 import { staffUpload } from '../middleware/uploadProfile.js';
+import { validateAcademicYearExists } from '../middleware/academicYearValidation.js';
 import {
   createStaff,
   getAllStaff,
@@ -61,7 +62,12 @@ const createStaffValidation = [
   body('baseSalary')
     .optional()
     .isFloat({ min: 0 })
-    .withMessage('Salary must be a positive number')
+    .withMessage('Salary must be a positive number'),
+
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid')
 ];
 
 const updateStaffValidation = [
@@ -80,7 +86,12 @@ const updateStaffValidation = [
   body('role')
     .optional()
     .isIn(['teacher', 'coordinator', 'admin_staff'])
-    .withMessage('Invalid role')
+    .withMessage('Invalid role'),
+
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid')
 ];
 
 const salaryValidation = [
@@ -120,6 +131,10 @@ router.post('/', staffUpload.upload.single('profilePicture'), staffUpload.proces
 router.get('/', getAllStaff);
 router.get('/:id', getStaffById);
 router.put('/:id', staffUpload.upload.single('profilePicture'), staffUpload.processImage, updateStaffValidation, updateStaff);
+router.post('/',           validateAcademicYearExists, uploadStaffPhoto.single('photo'), createStaffValidation, createStaff);
+router.get('/',            getAllStaff);
+router.get('/:id',         getStaffById);
+router.put('/:id',         uploadStaffPhoto.single('photo'), updateStaffValidation, updateStaff);
 
 // Class & subject assignment
 router.put('/:id/assign', assignClassesAndSubjects);

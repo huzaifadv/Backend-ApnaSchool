@@ -20,6 +20,8 @@ export const createAcademicYear = async (req, res) => {
       });
     }
 
+    const hasCurrent = await AcademicYear.findOne({ isCurrent: true });
+
     // Create academic year
     const academicYear = await AcademicYear.create({
       year,
@@ -27,7 +29,7 @@ export const createAcademicYear = async (req, res) => {
       endDate,
       description,
       isActive: true,
-      isCurrent: false
+      isCurrent: !hasCurrent
     });
 
     res.status(201).json({

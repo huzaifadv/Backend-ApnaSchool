@@ -47,6 +47,11 @@ const classCreateValidation = [
       return true;
     }),
 
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid'),
+
   body('classTeacher')
     .optional()
     .trim()
@@ -76,6 +81,11 @@ const classUpdateValidation = [
       }
       return true;
     }),
+
+  body('academicYearId')
+    .optional()
+    .isMongoId()
+    .withMessage('Academic year ID must be valid'),
 
   body('classTeacher')
     .optional()
