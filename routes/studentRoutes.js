@@ -12,6 +12,7 @@ import {
 import { extractSchoolId, validateSchool } from '../middleware/tenantMiddleware.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
 import { validateAcademicYearExists } from '../middleware/academicYearValidation.js';
+import { studentUpload } from '../middleware/uploadProfile.js';
 
 const router = express.Router();
 
@@ -162,6 +163,7 @@ const studentUpdateValidation = [
 // Routes
 router.route('/')
   .post(validateAcademicYearExists, studentCreateValidation, createStudent)
+  .post(studentUpload.upload.single('profilePicture'), studentUpload.processImage, studentCreateValidation, createStudent)
   .get(getStudents);
 
 // Migration route - must be before /:id routes
@@ -169,7 +171,7 @@ router.post('/migrate', migrateStudentData);
 
 router.route('/:id')
   .get(getStudentById)
-  .put(studentUpdateValidation, updateStudent)
+  .put(studentUpload.upload.single('profilePicture'), studentUpload.processImage, studentUpdateValidation, updateStudent)
   .delete(deleteStudent);
 
 router.delete('/:id/permanent', permanentDeleteStudent);

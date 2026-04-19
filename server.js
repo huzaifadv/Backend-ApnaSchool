@@ -65,11 +65,21 @@ const app = express();
 // Trust proxy - important for deployment behind reverse proxies (Heroku, Vercel, etc.)
 app.set('trust proxy', 1);
 
+// ── Serve uploaded files BEFORE Helmet so no security headers block image loading ──
+// Images at /uploads/staff/, /uploads/students/, etc. must be cross-origin accessible
+// from the frontend (localhost:5173 → localhost:5000)
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
+
 // Security Middleware
 // Helmet helps secure Express apps by setting various HTTP headers
 app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production',
   crossOriginEmbedderPolicy: false,
+  // Allow cross-origin loading of uploaded images (staff photos, etc.)
+  crossOriginResourcePolicy: false,
 }));
 
 // Compression middleware to compress response bodies
@@ -91,12 +101,12 @@ const corsOptions = {
 
     const allowedOrigins = process.env.NODE_ENV === 'production'
       ? [
-          process.env.FRONTEND_URL,
-          'https://apnaschooledu.com',       // Non-www version
-          'https://www.apnaschooledu.com',   // www version
-          'https://app.apnaschooledu.com',   // App subdomain
-          'https://api.apnaschooledu.com'    // API subdomain
-        ].filter(Boolean)
+        process.env.FRONTEND_URL,
+        'https://apnaschooledu.com',       // Non-www version
+        'https://www.apnaschooledu.com',   // www version
+        'https://app.apnaschooledu.com',   // App subdomain
+        'https://api.apnaschooledu.com'    // API subdomain
+      ].filter(Boolean)
       : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'];
 
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
@@ -120,9 +130,6 @@ app.options('*', cors(corsOptions));
 // Body parsing middleware with size limits
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Database connection
 connectDB();
@@ -159,7 +166,7 @@ app.use('/api/super/logos', logoRoutes); // Super admin routes (must be first - 
 app.use('/api/logos', logoRoutes); // Public route for active logos (less specific)
 // ── Staff Management (new — safe extension) ───────────────────────────────────
 app.use('/api/admin/staff', staffRoutes);       // Admin manages staff
-app.use('/api/staff',       staffPortalRoutes); // Staff portal (login + own data)
+app.use('/api/staff', staffPortalRoutes); // Staff portal (login + own data)
 // ── FBR POS Integration (new — safe extension) ────────────────────────────────
 app.use('/api/admin/fbr', fbrRoutes);           // FBR configuration and testing
 // ── Advanced Fee Management (NEW) ─────────────────────────────────────────────

@@ -25,10 +25,10 @@ import School from '../models/School.js';
 const generateStaffToken = (staff, schoolId) => {
   return jwt.sign(
     {
-      portal:    'staff',          // Guards against admin/parent token reuse
+      portal: 'staff',          // Guards against admin/parent token reuse
       staffDbId: staff._id,        // MongoDB _id for DB lookups
       staffCode: staff.staffId,    // Human-readable code STF-YYYY-NNNN
-      role:      staff.role,
+      role: staff.role,
       schoolId
     },
     process.env.JWT_SECRET,
@@ -179,9 +179,9 @@ export const updateMyProfile = async (req, res) => {
     // Whitelist: only allow safe fields staff can self-update
     const { contact, qualification, profileImage } = req.body;
     const updateData = {};
-    if (contact)       updateData.contact       = contact;
+    if (contact) updateData.contact = contact;
     if (qualification) updateData.qualification = qualification;
-    if (profileImage)  updateData.profileImage  = profileImage;
+    if (profileImage) updateData.profileImage = profileImage;
 
     const Staff = await getModel(req.schoolId, 'staffs');
     const staff = await Staff.findByIdAndUpdate(
@@ -254,12 +254,12 @@ export const getMyClasses = async (req, res) => {
     const Class = await getModel(req.schoolId, 'classes');
 
     const classIds = req.staff.assignedClasses.map(c => c.classId);
-    const classes  = await Class.find({ _id: { $in: classIds }, isActive: true });
+    const classes = await Class.find({ _id: { $in: classIds }, isActive: true });
 
     return res.status(200).json({
       success: true,
       count: classes.length,
-      data:  classes
+      data: classes
     });
   } catch (error) {
     console.error('getMyClasses error:', error);
@@ -280,7 +280,7 @@ export const getAllSchoolClasses = async (req, res) => {
     return res.status(200).json({
       success: true,
       count: classes.length,
-      data:  classes
+      data: classes
     });
   } catch (error) {
     console.error('getAllSchoolClasses error:', error);
@@ -313,7 +313,7 @@ export const getClassStudents = async (req, res) => {
     return res.status(200).json({
       success: true,
       count: students.length,
-      data:  students
+      data: students
     });
   } catch (error) {
     console.error('getClassStudents error:', error);
@@ -358,7 +358,7 @@ export const markClassAttendance = async (req, res) => {
     // Both save and query use the same conversion so they always match.
     const attendanceDate = new Date(date); // '2026-02-19' → 2026-02-19T00:00:00.000Z
     const dayStart = new Date(date);
-    const dayEnd   = new Date(date);
+    const dayEnd = new Date(date);
     dayEnd.setUTCHours(23, 59, 59, 999);
 
     const results = { success: [], failed: [] };
@@ -375,17 +375,17 @@ export const markClassAttendance = async (req, res) => {
         });
 
         if (existing) {
-          existing.status    = normalizedStatus;
-          existing.markedBy  = req.staffDbId;
+          existing.status = normalizedStatus;
+          existing.markedBy = req.staffDbId;
           await existing.save();
           results.success.push({ studentId, action: 'updated' });
         } else {
           await Attendance.create({
             studentId,
             classId,
-            date:     attendanceDate,
-            status:   normalizedStatus,
-            period:   'Full Day',
+            date: attendanceDate,
+            status: normalizedStatus,
+            period: 'Full Day',
             markedBy: req.staffDbId
           });
           results.success.push({ studentId, action: 'created' });
@@ -398,7 +398,7 @@ export const markClassAttendance = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: `Attendance saved: ${results.success.length} successful, ${results.failed.length} failed`,
-      data:    results
+      data: results
     });
   } catch (error) {
     console.error('markClassAttendance error:', error);
@@ -442,7 +442,7 @@ export const getMyClassAttendance = async (req, res) => {
     } else if (from || to) {
       query.date = {};
       if (from) { query.date.$gte = new Date(from.split('T')[0]); }
-      if (to)   { const e = new Date(to.split('T')[0]); e.setUTCHours(23,59,59,999); query.date.$lte = e; }
+      if (to) { const e = new Date(to.split('T')[0]); e.setUTCHours(23, 59, 59, 999); query.date.$lte = e; }
     }
 
     const Student = await getModel(req.schoolId, 'students'); // register before manual fetch
@@ -494,7 +494,7 @@ export const markSelfAttendance = async (req, res) => {
 
     const existing = await StaffAttendance.findOne({
       staffId: req.staffDbId,
-      date:    attendanceDate
+      date: attendanceDate
     });
 
     if (existing) {
@@ -505,19 +505,19 @@ export const markSelfAttendance = async (req, res) => {
     }
 
     const record = await StaffAttendance.create({
-      staffId:            req.staffDbId,
-      date:               attendanceDate,
+      staffId: req.staffDbId,
+      date: attendanceDate,
       status,
-      checkInTime:        checkInTime  ? new Date(checkInTime)  : undefined,
-      checkOutTime:       checkOutTime ? new Date(checkOutTime) : undefined,
-      markedBy:           'self',
+      checkInTime: checkInTime ? new Date(checkInTime) : undefined,
+      checkOutTime: checkOutTime ? new Date(checkOutTime) : undefined,
+      markedBy: 'self',
       verificationStatus: 'pending'
     });
 
     return res.status(201).json({
       success: true,
       message: 'Attendance submitted. Awaiting admin verification.',
-      data:    record
+      data: record
     });
   } catch (error) {
     console.error('markSelfAttendance error:', error);
@@ -539,8 +539,8 @@ export const getMySelfAttendance = async (req, res) => {
 
     if (month && year) {
       const start = new Date(year, month - 1, 1);
-      const end   = new Date(year, month, 0, 23, 59, 59);
-      query.date  = { $gte: start, $lte: end };
+      const end = new Date(year, month, 0, 23, 59, 59);
+      query.date = { $gte: start, $lte: end };
     }
 
     const records = await StaffAttendance.find(query).sort({ date: -1 });
@@ -609,17 +609,17 @@ export const createDiaryEntry = async (req, res) => {
     const Diary = await getModel(req.schoolId, 'diary');
     const entry = await Diary.create({
       classId,
-      teacherId:   req.staffDbId,
+      teacherId: req.staffDbId,
       teacherName: req.staff.name,
-      date:        diaryDate,
-      subjects:    subjects.map(s => ({ title: s.title, description: s.description })),
-      isActive:    true
+      date: diaryDate,
+      subjects: subjects.map(s => ({ title: s.title, description: s.description })),
+      isActive: true
     });
 
     return res.status(201).json({
       success: true,
       message: 'Diary entry created successfully. Parents can now view it.',
-      data:    entry
+      data: entry
     });
   } catch (error) {
     console.error('createDiaryEntry error:', error);
@@ -645,7 +645,7 @@ export const getMyDiaryEntries = async (req, res) => {
     if (from || to) {
       query.date = {};
       if (from) query.date.$gte = new Date(from);
-      if (to)   query.date.$lte = new Date(to);
+      if (to) query.date.$lte = new Date(to);
     }
 
     const entries = await Diary.find(query).sort({ date: -1 }).lean();
@@ -698,7 +698,7 @@ export const updateDiaryEntry = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Diary entry updated successfully',
-      data:    entry
+      data: entry
     });
   } catch (error) {
     console.error('updateDiaryEntry error:', error);
@@ -808,13 +808,13 @@ export const addMarksEntry = async (req, res) => {
       totalMarks,
       obtainedMarks,
       academicYear: academicYear || '',
-      remarks:      remarks || ''
+      remarks: remarks || ''
     });
 
     return res.status(201).json({
       success: true,
       message: 'Marks entry saved successfully',
-      data:    mark
+      data: mark
     });
   } catch (error) {
     if (error.code === 11000) {
@@ -851,7 +851,7 @@ export const getMyMarks = async (req, res) => {
     }
 
     if (examType) query.examType = examType;
-    if (subject)  query.subject  = { $regex: subject, $options: 'i' };
+    if (subject) query.subject = { $regex: subject, $options: 'i' };
 
     const marks = await StaffMarks.find(query).sort({ createdAt: -1 });
 
@@ -885,9 +885,9 @@ export const updateMarksEntry = async (req, res) => {
 
     const { totalMarks, obtainedMarks, remarks } = req.body;
 
-    if (totalMarks !== undefined)   mark.totalMarks    = totalMarks;
+    if (totalMarks !== undefined) mark.totalMarks = totalMarks;
     if (obtainedMarks !== undefined) mark.obtainedMarks = obtainedMarks;
-    if (remarks !== undefined)       mark.remarks       = remarks;
+    if (remarks !== undefined) mark.remarks = remarks;
 
     if (mark.obtainedMarks > mark.totalMarks) {
       return res.status(400).json({
@@ -901,7 +901,7 @@ export const updateMarksEntry = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Marks updated successfully',
-      data:    mark
+      data: mark
     });
   } catch (error) {
     console.error('updateMarksEntry error:', error);
@@ -940,17 +940,17 @@ export const submitMonthlyReport = async (req, res) => {
     const StaffMonthlyReport = await getModel(req.schoolId, 'staffmonthlyreports');
 
     // Upsert: allow staff to save drafts before final submission
-    const status      = submit ? 'submitted' : 'draft';
-    const submittedAt = submit ? new Date()   : undefined;
+    const status = submit ? 'submitted' : 'draft';
+    const submittedAt = submit ? new Date() : undefined;
 
     const report = await StaffMonthlyReport.findOneAndUpdate(
       { staffId: req.staffDbId, classId, month: parseInt(month), year: parseInt(year) },
       {
         $set: {
           totalClassesTaken: totalClassesTaken || 0,
-          topicsCompleted:   topicsCompleted   || [],
-          pendingTopics:     pendingTopics      || [],
-          remarks:           remarks            || '',
+          topicsCompleted: topicsCompleted || [],
+          pendingTopics: pendingTopics || [],
+          remarks: remarks || '',
           status,
           submittedAt
         }
@@ -961,7 +961,7 @@ export const submitMonthlyReport = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: submit ? 'Report submitted successfully' : 'Draft saved successfully',
-      data:    report
+      data: report
     });
   } catch (error) {
     console.error('submitMonthlyReport error:', error);
@@ -982,9 +982,9 @@ export const getMyMonthlyReports = async (req, res) => {
     const query = { staffId: req.staffDbId };
 
     if (classId) query.classId = classId;
-    if (month)   query.month   = parseInt(month);
-    if (year)    query.year    = parseInt(year);
-    if (status)  query.status  = status;
+    if (month) query.month = parseInt(month);
+    if (year) query.year = parseInt(year);
+    if (status) query.status = status;
 
     const reports = await StaffMonthlyReport.find(query).sort({ year: -1, month: -1 });
 
@@ -1169,7 +1169,7 @@ export const updateStaffPhoto = async (req, res) => {
     const Staff = await getModel(req.schoolId, 'staffs');
     const staff = await Staff.findByIdAndUpdate(
       req.staffDbId,
-      { $set: { profileImage: req.file.path } },
+      { $set: { profileImage: req.file.path, profilePicture: req.file.path } },
       { new: true }
     ).select('-password');
     if (!staff) {
