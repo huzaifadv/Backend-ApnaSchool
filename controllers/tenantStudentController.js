@@ -167,7 +167,8 @@ export const createStudent = async (req, res, next) => {
       currentAcademicYear: yearDoc.year,
       academicYearId: yearDoc._id,
       monthlyFee: monthlyFee || 0,
-      feeDueDate: feeDueDate || 1
+      feeDueDate: feeDueDate || 1,
+      ...(req.file && { profilePicture: req.file.path })
     });
 
     // Manually attach class details instead of populate to avoid schema registration issues
@@ -203,7 +204,7 @@ export const getStudents = async (req, res, next) => {
 
     // Get models from tenant database
     const Student = await getModel(req.schoolId, 'students');
-    const Class   = await getModel(req.schoolId, 'classes');
+    const Class = await getModel(req.schoolId, 'classes');
 
     // Build filter (no schoolId needed - tenant database is isolated)
     const filter = {};
@@ -380,7 +381,11 @@ export const updateStudent = async (req, res, next) => {
       }
     }
 
-    // Get Class model for manual populate
+    // Handle profile picture upload
+    if (req.file) {
+      updateData.profilePicture = req.file.path;
+    }
+
     // Update student
     const updatedStudent = await Student.findByIdAndUpdate(
       req.params.id,
@@ -461,9 +466,9 @@ export const deleteStudent = async (req, res, next) => {
  */
 export const permanentDeleteStudent = async (req, res, next) => {
   try {
-    const Student    = await getModel(req.schoolId, 'students');
+    const Student = await getModel(req.schoolId, 'students');
     const Attendance = await getModel(req.schoolId, 'attendance');
-    const Report     = await getModel(req.schoolId, 'reports');
+    const Report = await getModel(req.schoolId, 'reports');
     const FeePayment = await getModel(req.schoolId, 'feepayments');
 
     const student = await Student.findByIdAndDelete(req.params.id);

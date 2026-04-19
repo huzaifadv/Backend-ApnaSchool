@@ -126,38 +126,38 @@ const salaryValidation = [
 router.use(protect);
 
 // Staff CRUD
-router.post('/',           validateAcademicYearExists, uploadStaffPhoto.single('photo'), createStaffValidation, createStaff);
-router.get('/',            getAllStaff);
-router.get('/:id',         getStaffById);
-router.put('/:id',         uploadStaffPhoto.single('photo'), updateStaffValidation, updateStaff);
+router.post('/', validateAcademicYearExists, uploadStaffPhoto.single('profilePicture'), createStaffValidation, createStaff);
+router.get('/', getAllStaff);
+router.get('/:id', getStaffById);
+router.put('/:id', uploadStaffPhoto.single('profilePicture'), updateStaffValidation, updateStaff);
 
 // Class & subject assignment
-router.put('/:id/assign',  assignClassesAndSubjects);
+router.put('/:id/assign', assignClassesAndSubjects);
 
 // Password reset (admin action)
 router.put('/:id/reset-password', resetStaffPassword);
 
 // Toggle active/inactive status
-router.put('/:id/toggle-status',  toggleStaffStatus);
+router.put('/:id/toggle-status', toggleStaffStatus);
 
 // Delete staff permanently
 router.delete('/:id', deleteStaff);
 
 // Salary management
-router.post('/:id/salary',                              salaryValidation, addSalaryRecord);
-router.get('/:id/salary',                               getStaffSalaryHistory);
-router.put('/:id/salary/:salaryId',                     updateSalaryRecord);
-router.delete('/:id/salary/:salaryId',                  deleteSalaryRecord);
-router.put('/:id/salary/:salaryId/toggle-status',       toggleSalaryStatus);
-router.post('/:id/salary/:salaryId/invoice',            createSalaryInvoice);
+router.post('/:id/salary', salaryValidation, addSalaryRecord);
+router.get('/:id/salary', getStaffSalaryHistory);
+router.put('/:id/salary/:salaryId', updateSalaryRecord);
+router.delete('/:id/salary/:salaryId', deleteSalaryRecord);
+router.put('/:id/salary/:salaryId/toggle-status', toggleSalaryStatus);
+router.post('/:id/salary/:salaryId/invoice', createSalaryInvoice);
 
 // Self-attendance verification
 // NOTE: these routes must come BEFORE /:id routes to avoid param collision
-router.get('/attendance/pending',                  getPendingAttendance);
-router.put('/attendance/:attendanceId/verify',     verifyStaffAttendance);
+router.get('/attendance/pending', getPendingAttendance);
+router.put('/attendance/:attendanceId/verify', verifyStaffAttendance);
 
 // Overview endpoints for admin
-router.get('/overview/marks',   getAllStaffMarks);
+router.get('/overview/marks', getAllStaffMarks);
 router.get('/overview/reports', getAllStaffMonthlyReports);
 
 export default router;

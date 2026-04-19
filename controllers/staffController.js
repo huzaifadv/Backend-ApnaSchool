@@ -116,7 +116,8 @@ export const createStaff = async (req, res) => {
       password: passwordHash,
       assignedClasses: [],
       assignedSubjects: [],
-      ...(req.file?.path && { profileImage: req.file.path })
+      profileImage: req.file?.path || undefined, // Fallback for old codebase usage if needed
+      ...(req.file?.path && { profilePicture: req.file.path })
     });
 
     // Never return password in response
@@ -150,18 +151,18 @@ export const getAllStaff = async (req, res) => {
     const Staff = await getModel(req.schoolId, 'staffs');
 
     const query = {};
-    if (status)  query.status = status;
-    if (role)    query.role   = role;
+    if (status) query.status = status;
+    if (role) query.role = role;
     if (academicYearId) query.academicYearId = academicYearId;
     if (search) {
       query.$or = [
-        { name:    { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
         { staffId: { $regex: search, $options: 'i' } },
-        { cnic:    { $regex: search, $options: 'i' } }
+        { cnic: { $regex: search, $options: 'i' } }
       ];
     }
 
-    const skip  = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await Staff.countDocuments(query);
     const staff = await Staff.find(query)
       .select('-password')
@@ -177,7 +178,7 @@ export const getAllStaff = async (req, res) => {
         .select('_id status');
       const obj = s.toObject();
       obj.latestSalaryStatus = latestSalary?.status || null;
-      obj.latestSalaryId     = latestSalary?._id || null;
+      obj.latestSalaryId = latestSalary?._id || null;
       return obj;
     }));
 
@@ -186,8 +187,8 @@ export const getAllStaff = async (req, res) => {
       data: staffWithSalary,
       pagination: {
         total,
-        page:       parseInt(page),
-        limit:      parseInt(limit),
+        page: parseInt(page),
+        limit: parseInt(limit),
         totalPages: Math.ceil(total / parseInt(limit))
       }
     });
@@ -261,7 +262,7 @@ export const updateStaff = async (req, res) => {
     }
 
     if (req.file?.path) {
-      updateData.profileImage = req.file.path;
+      updateData.profilePicture = req.file.path;
     }
 
     const Staff = await getModel(req.schoolId, 'staffs');
@@ -448,7 +449,7 @@ export const toggleStaffStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Staff not found' });
     }
 
-    staff.status   = staff.status === 'active' ? 'inactive' : 'active';
+    staff.status = staff.status === 'active' ? 'inactive' : 'active';
     staff.isActive = staff.status === 'active';
     await staff.save();
 
@@ -509,7 +510,7 @@ export const addSalaryRecord = async (req, res) => {
     }
 
     const netSalary = basicSalary + allowances - deductions;
-    const paid      = Number(amountPaid) || 0;
+    const paid = Number(amountPaid) || 0;
 
     // Auto-calculate status from amountPaid
     let autoStatus = 'pending';
@@ -519,18 +520,18 @@ export const addSalaryRecord = async (req, res) => {
     const finalStatus = status || autoStatus;
 
     const record = await SalaryHistory.create({
-      staffId:    staff._id,
+      staffId: staff._id,
       month,
       year,
       basicSalary,
       allowances,
       deductions,
       netSalary,
-      amountPaid:  paid,
-      status:      finalStatus,
-      paidAt:      finalStatus === 'paid' ? new Date() : undefined,
+      amountPaid: paid,
+      status: finalStatus,
+      paidAt: finalStatus === 'paid' ? new Date() : undefined,
       remarks,
-      createdBy:   req.admin._id
+      createdBy: req.admin._id
     });
 
     return res.status(201).json({
@@ -647,17 +648,17 @@ export const updateSalaryRecord = async (req, res) => {
 
     // Update fields if provided
     if (basicSalary !== undefined) record.basicSalary = basicSalary;
-    if (allowances  !== undefined) record.allowances  = allowances;
-    if (deductions  !== undefined) record.deductions  = deductions;
-    if (remarks     !== undefined) record.remarks     = remarks;
-    if (amountPaid  !== undefined) record.amountPaid  = Number(amountPaid) || 0;
+    if (allowances !== undefined) record.allowances = allowances;
+    if (deductions !== undefined) record.deductions = deductions;
+    if (remarks !== undefined) record.remarks = remarks;
+    if (amountPaid !== undefined) record.amountPaid = Number(amountPaid) || 0;
 
     // Recalculate netSalary
     record.netSalary = record.basicSalary + record.allowances - record.deductions;
 
     // Auto-calculate status from amountPaid (override manual status)
     const paid = record.amountPaid || 0;
-    const net  = record.netSalary  || 0;
+    const net = record.netSalary || 0;
     let autoStatus = 'pending';
     if (paid >= net && net > 0) autoStatus = 'paid';
     else if (paid > 0) autoStatus = 'partial';
@@ -705,7 +706,7 @@ export const getStaffSalaryHistory = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        staff:  { _id: staff._id, name: staff.name, staffId: staff.staffId, role: staff.role, contact: staff.contact, profileImage: staff.profileImage, baseSalary: staff.baseSalary, salaryDueDate: staff.salaryDueDate },
+        staff: { _id: staff._id, name: staff.name, staffId: staff.staffId, role: staff.role, contact: staff.contact, profileImage: staff.profileImage, baseSalary: staff.baseSalary, salaryDueDate: staff.salaryDueDate },
         salary: history
       }
     });
@@ -740,8 +741,8 @@ export const createSalaryInvoice = async (req, res) => {
     const count = await SalaryHistory.countDocuments({ invoiceCreated: true });
     const invoiceNumber = `SAL-${schoolIdLast6}-${String(count + 1).padStart(4, '0')}`;
 
-    record.invoiceNumber    = invoiceNumber;
-    record.invoiceCreated   = true;
+    record.invoiceNumber = invoiceNumber;
+    record.invoiceCreated = true;
     record.invoiceCreatedAt = new Date();
     await record.save();
 
@@ -770,7 +771,7 @@ export const createSalaryInvoice = async (req, res) => {
 export const getPendingAttendance = async (req, res) => {
   try {
     const StaffAttendance = await getModel(req.schoolId, 'staffattendance');
-    const Staff           = await getModel(req.schoolId, 'staffs');
+    const Staff = await getModel(req.schoolId, 'staffs');
 
     const records = await StaffAttendance.find({ verificationStatus: 'pending' })
       .sort({ date: -1 })
@@ -779,7 +780,7 @@ export const getPendingAttendance = async (req, res) => {
     return res.status(200).json({
       success: true,
       count: records.length,
-      data:  records
+      data: records
     });
   } catch (error) {
     console.error('getPendingAttendance error:', error);
@@ -824,8 +825,8 @@ export const verifyStaffAttendance = async (req, res) => {
     }
 
     record.verificationStatus = action;
-    record.verifiedBy         = req.admin._id;
-    record.verifiedAt         = new Date();
+    record.verifiedBy = req.admin._id;
+    record.verifiedAt = new Date();
     if (remarks) record.remarks = remarks;
 
     await record.save();
@@ -833,7 +834,7 @@ export const verifyStaffAttendance = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: `Attendance ${action} successfully`,
-      data:    record
+      data: record
     });
   } catch (error) {
     console.error('verifyStaffAttendance error:', error);
@@ -856,9 +857,9 @@ export const getAllStaffMarks = async (req, res) => {
 
     const StaffMarks = await getModel(req.schoolId, 'staffmarks');
     const query = {};
-    if (classId)  query.classId  = classId;
+    if (classId) query.classId = classId;
     if (examType) query.examType = examType;
-    if (subject)  query.subject  = { $regex: subject, $options: 'i' };
+    if (subject) query.subject = { $regex: subject, $options: 'i' };
 
     const marks = await StaffMarks.find(query).sort({ createdAt: -1 });
 
@@ -884,8 +885,8 @@ export const getAllStaffMonthlyReports = async (req, res) => {
 
     const StaffMonthlyReport = await getModel(req.schoolId, 'staffmonthlyreports');
     const query = {};
-    if (month)  query.month  = parseInt(month);
-    if (year)   query.year   = parseInt(year);
+    if (month) query.month = parseInt(month);
+    if (year) query.year = parseInt(year);
     if (status) query.status = status;
 
     const reports = await StaffMonthlyReport.find(query).sort({ year: -1, month: -1 });
