@@ -381,8 +381,7 @@ export const updateStudent = async (req, res, next) => {
       }
     }
 
-    // Get Class model for manual populate
-    const Class = await getModel(req.schoolId, 'classes');
+    // Handle profile picture upload
 
     if (req.file) {
       req.body.profilePicture = req.file.path;
