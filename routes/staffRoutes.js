@@ -127,14 +127,10 @@ const salaryValidation = [
 router.use(protect);
 
 // Staff CRUD
-router.post('/', staffUpload.upload.single('profilePicture'), staffUpload.processImage, createStaffValidation, createStaff);
+router.post('/', staffUpload.upload.single('profilePicture'), staffUpload.processImage, validateAcademicYearExists, createStaffValidation, createStaff);
 router.get('/', getAllStaff);
 router.get('/:id', getStaffById);
 router.put('/:id', staffUpload.upload.single('profilePicture'), staffUpload.processImage, updateStaffValidation, updateStaff);
-router.post('/',           validateAcademicYearExists, uploadStaffPhoto.single('photo'), createStaffValidation, createStaff);
-router.get('/',            getAllStaff);
-router.get('/:id',         getStaffById);
-router.put('/:id',         uploadStaffPhoto.single('photo'), updateStaffValidation, updateStaff);
 
 // Class & subject assignment
 router.put('/:id/assign', assignClassesAndSubjects);
