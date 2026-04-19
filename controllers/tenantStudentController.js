@@ -467,9 +467,15 @@ export const deleteStudent = async (req, res, next) => {
  */
 export const permanentDeleteStudent = async (req, res, next) => {
   try {
+<<<<<<< HEAD
     const Student = await getModel(req.schoolId, 'students');
     const Attendance = await getModel(req.schoolId, 'attendance');
     const Report = await getModel(req.schoolId, 'reports');
+=======
+    const Student    = await getModel(req.schoolId, 'students');
+    const Attendance = await getModel(req.schoolId, 'attendance');
+    const Report     = await getModel(req.schoolId, 'reports');
+>>>>>>> misbah
     const FeePayment = await getModel(req.schoolId, 'feepayments');
 
     const student = await Student.findByIdAndDelete(req.params.id);
