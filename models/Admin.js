@@ -24,7 +24,7 @@ const adminSchema = new mongoose.Schema({
     required: [true, 'Password is required'],
     minlength: [8, 'Password must be at least 8 characters'],
     validate: {
-      validator: function(value) {
+      validator: function (value) {
         // Strong password validation:
         // At least one uppercase, one lowercase, one number, one special character
         const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
@@ -45,6 +45,10 @@ const adminSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  profilePicture: {
+    type: String,
+    default: '/assets/default-admin.png'
   },
   // Password Reset Fields (OTP still needed for password reset)
   resetPasswordCode: {
