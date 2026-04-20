@@ -302,12 +302,12 @@ function drawIDCard(doc, x, y, w, h, templateName, data) {
     }
     doc.restore();
 
-    // School Name & Address 
-    doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+    // School Name & Address
+    doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold')
        .text(data.schoolName || 'School Name', x + 50, y + 10, { width: w - 55, align: 'left' });
-    
+
     if (data.schoolAddress) {
-       doc.fontSize(7).font('Helvetica').text(data.schoolAddress, x + 50, y + 22, { width: w - 55, height: 20 });
+       doc.fontSize(6).font('Helvetica').text(data.schoolAddress, x + 50, y + 21, { width: w - 55, height: 20 });
     }
 
     // Photo Box exactly 80x80 pixels => inside PDF point sizing equivalent 
@@ -341,27 +341,27 @@ function drawIDCard(doc, x, y, w, h, templateName, data) {
     // Fields rendering variables
     const labelX = x + 10;
     let dataY = y + 52;
-    const fontSize = 8.5;
+    const fontSize = 7;
 
-    doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(11).text(data.name, labelX, dataY, { width: w - photoSize - 25 });
-    dataY += 15;
-    
+    doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(9).text(data.name, labelX, dataY, { width: w - photoSize - 25 });
+    dataY += 13;
+
     doc.fillColor(textColor).font('Helvetica-Bold').fontSize(fontSize).text('Class:', labelX, dataY, { continued: true })
        .font('Helvetica').text(` ${data.class}`);
-    dataY += 12;
+    dataY += 10;
 
     doc.font('Helvetica-Bold').text('Roll No:', labelX, dataY, { continued: true })
        .font('Helvetica').text(` ${data.roll || 'N/A'}`);
-    dataY += 12;
+    dataY += 10;
 
     doc.font('Helvetica-Bold').text('Student ID:', labelX, dataY, { continued: true })
        .font('Helvetica').text(` ${data.studentId !== 'N/A' ? data.studentId : '-'}`);
-    dataY += 12;
+    dataY += 10;
 
     doc.font('Helvetica-Bold').text('Session:', labelX, dataY, { continued: true })
        .font('Helvetica').text(` ${data.session}`);
-    dataY += 12;
-    
+    dataY += 10;
+
     if (data.parentPhone && data.parentPhone !== 'N/A') {
         doc.font('Helvetica-Bold').text('Emergency:', labelX, dataY, { continued: true })
            .font('Helvetica').text(` ${data.parentPhone}`);
