@@ -64,7 +64,10 @@ export const previewIDCard = async (req, res) => {
     let logoBuffer = null;
     if (school && school.logo && school.logo.url) {
       try {
-        const response = await axios.get(school.logo.url, { responseType: 'arraybuffer' });
+        const logoUrl = school.logo.url.startsWith('http') 
+            ? school.logo.url 
+            : `${req.protocol}://${req.get('host')}${school.logo.url}`;
+        const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
         logoBuffer = Buffer.from(response.data, 'binary');
       } catch (err) {}
     }
@@ -136,7 +139,10 @@ export const generateIDCards = async (req, res) => {
     let logoBuffer = null;
     if (school.logo && school.logo.url) {
       try {
-        const response = await axios.get(school.logo.url, { responseType: 'arraybuffer' });
+        const logoUrl = school.logo.url.startsWith('http') 
+            ? school.logo.url 
+            : `${req.protocol}://${req.get('host')}${school.logo.url}`;
+        const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
         logoBuffer = Buffer.from(response.data, 'binary');
       } catch (err) {}
     }
