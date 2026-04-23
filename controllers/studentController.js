@@ -98,6 +98,11 @@ export const createStudent = async (req, res, next) => {
       studentCreateData.password = hashedPassword;
     }
 
+    // Add profile picture if uploaded
+    if (req.file && req.file.path) {
+      studentCreateData.profilePicture = req.file.path;
+    }
+
     const student = await Student.create(studentCreateData);
 
     // Populate class details
@@ -289,6 +294,11 @@ export const updateStudent = async (req, res, next) => {
     // Prevent changing parentAccessCode and schoolId
     delete req.body.parentAccessCode;
     delete req.body.schoolId;
+
+    // Add profile picture if uploaded
+    if (req.file && req.file.path) {
+      req.body.profilePicture = req.file.path;
+    }
 
     // Update student
     const updatedStudent = await Student.findByIdAndUpdate(

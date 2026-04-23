@@ -25,7 +25,7 @@ const createUploadMiddleware = (folderName) => {
   const upload = multer({
     storage,
     fileFilter,
-    limits: { fileSize: 500 * 1024 } // 500KB size limit
+    limits: { fileSize: 512000 } // 500KB size limit (512000 bytes)
   });
 
   const processImage = async (req, res, next) => {
@@ -40,7 +40,8 @@ const createUploadMiddleware = (folderName) => {
       }
 
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const filename = `profile_${uniqueSuffix}.jpg`;
+      const prefix = folderName.substring(0, folderName.length - 1); // e.g. 'student' or 'staff'
+      const filename = `${prefix}_${uniqueSuffix}.jpg`;
       const localFilePath = path.join(folderPath, filename);
 
       // Resize exactly to 500x500 using Sharp
@@ -73,3 +74,6 @@ export const staffUpload = createUploadMiddleware('staff');
 
 // Configuration for Admins
 export const adminUpload = createUploadMiddleware('admin');
+
+// Configuration for School Logos
+export const schoolLogoUpload = createUploadMiddleware('school-logos');
