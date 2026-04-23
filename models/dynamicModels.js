@@ -135,7 +135,7 @@ const studentSchema = new mongoose.Schema({
   },
   profilePicture: {
     type: String,
-    default: '/assets/default-student.png'
+    default: '/assets/default-profile.png'
   },
   enrollmentHistory: [{
     academicYear: {
@@ -258,7 +258,7 @@ const adminSchema = new mongoose.Schema({
   },
   profilePicture: {
     type: String,
-    default: '/assets/default-admin.png'
+    default: '/assets/default-profile.png'
   },
   // Email Verification Fields (Feature 1)
   isEmailVerified: {
@@ -582,7 +582,7 @@ const teacherSchema = new mongoose.Schema({
   },
   profilePicture: {
     type: String,
-    default: '/assets/default-staff.png'
+    default: '/assets/default-profile.png'
   }
 }, {
   timestamps: true
@@ -1196,7 +1196,7 @@ const staffSchema = new mongoose.Schema({
   },
   profilePicture: {
     type: String,
-    default: '/assets/default-staff.png'
+    default: '/assets/default-profile.png'
   },
   readNotices: [{
     type: mongoose.Schema.Types.ObjectId,
