@@ -382,6 +382,7 @@ export const updateStudent = async (req, res, next) => {
     }
 
     // Handle profile picture upload
+
     if (req.file) {
       updateData.profilePicture = req.file.path;
     }

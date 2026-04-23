@@ -44,6 +44,7 @@ import courseRoutes from './routes/courseRoutes.js';
 import academicYearRoutes from './routes/academicYearRoutes.js';
 import feeAccessRoutes from './routes/feeAccessRoutes.js';
 import logoRoutes from './routes/logoRoutes.js';
+import idCardRoutes from './routes/idCardRoutes.js';
 // ── Staff Management (new — safe extension) ───────────────────────────────────
 import staffRoutes from './routes/staffRoutes.js';
 import staffPortalRoutes from './routes/staffPortalRoutes.js';
@@ -164,6 +165,7 @@ app.use('/api/admin/academic-years', academicYearRoutes);
 app.use('/api/admin/fee-access', feeAccessRoutes);
 app.use('/api/super/logos', logoRoutes); // Super admin routes (must be first - more specific)
 app.use('/api/logos', logoRoutes); // Public route for active logos (less specific)
+app.use('/api/admin/idcards', idCardRoutes); // F-02 Student ID Cards
 // ── Staff Management (new — safe extension) ───────────────────────────────────
 app.use('/api/admin/staff', staffRoutes);       // Admin manages staff
 app.use('/api/staff', staffPortalRoutes); // Staff portal (login + own data)

@@ -27,6 +27,10 @@ const studentSchema = new mongoose.Schema({
     required: [true, 'Roll number is required'],
     trim: true
   },
+  studentId: {
+    type: String,
+    trim: true
+  },
   fullName: {
     type: String,
     required: [true, 'Full name is required'],

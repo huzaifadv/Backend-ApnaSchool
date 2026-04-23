@@ -11,6 +11,7 @@ import express from 'express';
 import { body, param } from 'express-validator';
 import { protect } from '../middleware/authMiddleware.js';
 import { uploadStaffPhoto } from '../config/multer.js';
+import { staffUpload } from '../middleware/uploadProfile.js';
 import { validateAcademicYearExists } from '../middleware/academicYearValidation.js';
 import {
   createStaff,
@@ -126,10 +127,10 @@ const salaryValidation = [
 router.use(protect);
 
 // Staff CRUD
-router.post('/', validateAcademicYearExists, uploadStaffPhoto.single('profilePicture'), createStaffValidation, createStaff);
+router.post('/', staffUpload.upload.single('profilePicture'), staffUpload.processImage, validateAcademicYearExists, createStaffValidation, createStaff);
 router.get('/', getAllStaff);
 router.get('/:id', getStaffById);
-router.put('/:id', uploadStaffPhoto.single('profilePicture'), updateStaffValidation, updateStaff);
+router.put('/:id', staffUpload.upload.single('profilePicture'), staffUpload.processImage, updateStaffValidation, updateStaff);
 
 // Class & subject assignment
 router.put('/:id/assign', assignClassesAndSubjects);

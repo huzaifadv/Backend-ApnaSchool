@@ -162,8 +162,7 @@ const studentUpdateValidation = [
 
 // Routes
 router.route('/')
-  .post(validateAcademicYearExists, studentCreateValidation, createStudent)
-  .post(studentUpload.upload.single('profilePicture'), studentUpload.processImage, studentCreateValidation, createStudent)
+  .post(studentUpload.upload.single('profilePicture'), studentUpload.processImage, validateAcademicYearExists, studentCreateValidation, createStudent)
   .get(getStudents);
 
 // Migration route - must be before /:id routes
