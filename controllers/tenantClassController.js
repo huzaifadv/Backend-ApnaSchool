@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { validationResult } from 'express-validator';
 import { getModel } from '../models/dynamicModels.js';
 import { resolveAcademicYear } from '../utils/academicYearResolver.js';
@@ -70,6 +71,25 @@ export const createClass = async (req, res, next) => {
       room,
       capacity
     });
+
+    // Update staff record if teacher is assigned
+    if (classTeacher && mongoose.Types.ObjectId.isValid(classTeacher)) {
+      try {
+        const Staff = await getModel(req.schoolId, 'staffs');
+        await Staff.findByIdAndUpdate(classTeacher, {
+          $addToSet: {
+            assignedClasses: {
+              classId: newClass._id,
+              className: newClass.className,
+              section: newClass.section || '',
+              subjects: []
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Failed to sync staff assignment on class create:', error);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -282,6 +302,49 @@ export const updateClass = async (req, res, next) => {
       }
     );
 
+    // Sync with staff records if teacher or class details changed
+    try {
+      const Staff = await getModel(req.schoolId, 'staffs');
+      
+      // 1. If teacher changed, remove from old and add to new
+      if (req.body.classTeacher !== undefined && req.body.classTeacher !== classDoc.classTeacher) {
+        // Remove from old teacher if it was an ID
+        if (classDoc.classTeacher && mongoose.Types.ObjectId.isValid(classDoc.classTeacher)) {
+          await Staff.findByIdAndUpdate(classDoc.classTeacher, {
+            $pull: { assignedClasses: { classId: classDoc._id } }
+          });
+        }
+        
+        // Add to new teacher if it's an ID
+        if (req.body.classTeacher && mongoose.Types.ObjectId.isValid(req.body.classTeacher)) {
+          await Staff.findByIdAndUpdate(req.body.classTeacher, {
+            $addToSet: {
+              assignedClasses: {
+                classId: updatedClass._id,
+                className: updatedClass.className,
+                section: updatedClass.section || '',
+                subjects: []
+              }
+            }
+          });
+        }
+      } 
+      // 2. If details (name/section) changed and teacher didn't, update the entry in the current teacher's record
+      else if (updatedClass.classTeacher && mongoose.Types.ObjectId.isValid(updatedClass.classTeacher)) {
+        await Staff.updateOne(
+          { _id: updatedClass.classTeacher, 'assignedClasses.classId': updatedClass._id },
+          { 
+            $set: { 
+              'assignedClasses.$.className': updatedClass.className,
+              'assignedClasses.$.section': updatedClass.section || ''
+            }
+          }
+        );
+      }
+    } catch (error) {
+      console.error('Failed to sync staff assignment on class update:', error);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Class updated successfully',
@@ -326,6 +389,18 @@ export const deleteClass = async (req, res, next) => {
 
       // Delete all attendance records for this class
       await Attendance.deleteMany({ classId: req.params.id });
+    }
+
+    // Remove from staff assignments before deletion
+    if (classDoc.classTeacher && mongoose.Types.ObjectId.isValid(classDoc.classTeacher)) {
+      try {
+        const Staff = await getModel(req.schoolId, 'staffs');
+        await Staff.findByIdAndUpdate(classDoc.classTeacher, {
+          $pull: { assignedClasses: { classId: classDoc._id } }
+        });
+      } catch (error) {
+        console.error('Failed to sync staff assignment on class delete:', error);
+      }
     }
 
     // Permanently delete the class from database
