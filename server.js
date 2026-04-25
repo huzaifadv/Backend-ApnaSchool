@@ -56,6 +56,8 @@ import feeStructureRoutes from './routes/feeStructureRoutes.js';
 import discountPolicyRoutes from './routes/discountPolicyRoutes.js';
 import enhancedFeeRoutes from './routes/enhancedFeeRoutes.js';
 import studentFeeManagementRoutes from './routes/studentFeeManagementRoutes.js';
+import booksRoutes from './routes/books.js';
+import basketsRoutes from './routes/baskets.js';
 import errorHandler from './middleware/errorHandler.js';
 import initializeCronJobs from './config/cronJobs.js';
 
@@ -177,6 +179,8 @@ app.use('/api/admin/fee-structures', feeStructureRoutes);    // Class-wise fee c
 app.use('/api/admin/discount-policies', discountPolicyRoutes); // Discount policies
 app.use('/api/admin/fees', enhancedFeeRoutes);               // Enhanced fee operations (generation, installments, etc.)
 app.use('/api/admin/student-fees', studentFeeManagementRoutes); // Student fee profiles & monthly fee management
+app.use('/api/books', booksRoutes);
+app.use('/api/baskets', basketsRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
