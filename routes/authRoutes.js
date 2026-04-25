@@ -17,7 +17,8 @@ import {
 } from '../controllers/tenantAuthController.js';
 
 import { protect } from '../middleware/authMiddleware.js';
-import { uploadSchoolLogo as schoolLogoUpload } from '../config/multer.js';
+import { uploadSchoolLogo as schoolLogoUpload_old } from '../config/multer.js';
+import { schoolLogoUpload } from '../middleware/uploadProfile.js';
 
 const router = express.Router();
 
@@ -183,7 +184,7 @@ const resetPasswordValidation = [
 ];
 
 // Routes
-router.post('/schools', schoolLogoUpload.single('logo'), schoolRegistrationValidation, registerSchool);
+router.post('/schools', schoolLogoUpload.upload.single('logo'), schoolLogoUpload.processImage, schoolRegistrationValidation, registerSchool);
 router.get('/schools', getAllSchools);
 router.get('/schools/:id', getSchoolById);
 
@@ -212,7 +213,7 @@ router.post('/auth/reset-password', resetPasswordValidation, resetPassword);
 // Protected admin routes
 router.get('/admin/school', protect, getSchoolDetails);
 router.put('/admin/school', protect, updateSchoolValidation, updateSchoolDetails);
-router.post('/admin/school/logo', protect, schoolLogoUpload.single('logo'), uploadSchoolLogo);
+router.post('/admin/school/logo', protect, schoolLogoUpload.upload.single('logo'), schoolLogoUpload.processImage, uploadSchoolLogo);
 
 // Change password routes (protected - for logged-in admin)
 router.post('/admin/send-change-password-otp', protect, sendChangePasswordOTP);

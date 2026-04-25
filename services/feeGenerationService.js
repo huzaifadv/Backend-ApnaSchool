@@ -50,7 +50,7 @@ export const generateMonthlyFeeRecords = async () => {
 
         // Get all active students for this school
         const students = await Student.find({ isActive: true })
-          .select('_id classId monthlyFee fullName')
+          .select('_id classId monthlyFee totalMonthlyFee fullName')
           .lean();
 
         if (!students || students.length === 0) {
@@ -82,8 +82,12 @@ export const generateMonthlyFeeRecords = async () => {
               year: previousYear
             });
 
-            const previousRemaining = previousMonthPayment?.remainingAmount || 0;
-            const currentMonthFee = student.monthlyFee || 0;
+            // Recalculate previous remaining from amount - amountPaid (avoids stale remainingAmount)
+            const previousRemaining = previousMonthPayment
+              ? Math.max(0, (previousMonthPayment.amount || 0) - (previousMonthPayment.amountPaid || 0))
+              : 0;
+            // Use totalMonthlyFee (new structure) with fallback to legacy monthlyFee
+            const currentMonthFee = student.totalMonthlyFee || student.monthlyFee || 0;
             const totalDue = currentMonthFee + previousRemaining;
 
             // Create new fee record for current month
