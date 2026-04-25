@@ -170,15 +170,45 @@ export const getAllStaff = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
-    // Attach latest salary info for each staff member
+    // Attach latest salary info and classes for each staff member
     const SalaryHistory = await getModel(req.schoolId, 'staffsalaryhistory');
+    const Class = await getModel(req.schoolId, 'classes');
+    
     const staffWithSalary = await Promise.all(staff.map(async (s) => {
       const latestSalary = await SalaryHistory.findOne({ staffId: s._id })
         .sort({ year: -1, month: -1 })
         .select('_id status');
+      
       const obj = s.toObject();
       obj.latestSalaryStatus = latestSalary?.status || null;
       obj.latestSalaryId = latestSalary?._id || null;
+
+      // ── Enhance assignedClasses with classes where they are the primary Class Teacher ──
+      // Some classes might be assigned as Class Teacher but not in the assignedClasses array (legacy or manual sync)
+      const classTeacherDocs = await Class.find({ classTeacher: s._id.toString(), isActive: true });
+      
+      if (classTeacherDocs.length > 0) {
+        if (!obj.assignedClasses) obj.assignedClasses = [];
+        
+        classTeacherDocs.forEach(c => {
+          // Check if already in array
+          const exists = obj.assignedClasses.some(ac => ac.classId?.toString() === c._id.toString());
+          if (!exists) {
+            obj.assignedClasses.push({
+              classId: c._id,
+              className: c.className,
+              section: c.section || '',
+              subjects: [], // No subjects explicitly assigned for class teacher role itself
+              isClassTeacher: true
+            });
+          } else {
+            // Mark existing entry as class teacher
+            const idx = obj.assignedClasses.findIndex(ac => ac.classId?.toString() === c._id.toString());
+            obj.assignedClasses[idx].isClassTeacher = true;
+          }
+        });
+      }
+
       return obj;
     }));
 
