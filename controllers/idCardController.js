@@ -826,7 +826,6 @@ export const generateIDCards = async (req, res) => {
     if (!res.headersSent) res.status(500).json({ success: false, message: 'Server error generating ID cards' });
   }
 };
-};
 
 // Layout grid cut lines builder
 function drawCutLines(doc) {

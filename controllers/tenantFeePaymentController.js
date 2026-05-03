@@ -94,6 +94,9 @@ export const getClassFeeStatus = async (req, res, next) => {
         // IMPORTANT: Preserve 0 values for remainingAmount
         remainingAmount: payment ? (payment.remainingAmount !== undefined ? payment.remainingAmount : totalDue) : totalDue,
         partialPayments: payment ? payment.partialPayments || [] : [],
+        // Additional / extra charges
+        additionalChargesTotal: payment ? (payment.extraCharges || []).reduce((s, c) => s + (c.amount || 0), 0) : 0,
+        additionalCharges: payment ? (payment.extraCharges || []).map(c => ({ name: c.name, amount: c.amount, status: c.status || 'pending' })) : [],
         // FBR fields (additive - won't break existing functionality)
         isFbrReported: payment ? payment.isFbrReported : false,
         fbrInvoiceNumber: payment?.fbrData?.invoiceNumber || null,
@@ -1300,6 +1303,12 @@ export const getFeeAnalytics = async (req, res, next) => {
     const partialCount   = validPayments.filter(p => p.status === 'Partial').length;
     const pendingCount   = validPayments.filter(p => p.status === 'Pending').length;
 
+    // Extra / additional charges stats
+    const allExtraCharges = validPayments.flatMap(p => p.extraCharges || []);
+    const totalExtraCharges     = allExtraCharges.reduce((s, c) => s + (c.amount || 0), 0);
+    const totalExtraChargesPaid = allExtraCharges.filter(c => c.status === 'paid').reduce((s, c) => s + (c.amount || 0), 0);
+    const studentsWithExtras    = new Set(validPayments.filter(p => (p.extraCharges || []).length > 0).map(p => p.studentId?.toString())).size;
+
     // Last 12 months monthly breakdown
     const now = new Date();
     const monthly = [];
@@ -1336,7 +1345,7 @@ export const getFeeAnalytics = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: {
-        summary: { totalMonthlyFees, totalCollected, totalPending, totalStudents, paidCount, partialCount, pendingCount },
+        summary: { totalMonthlyFees, totalCollected, totalPending, totalStudents, paidCount, partialCount, pendingCount, totalExtraCharges, totalExtraChargesPaid, studentsWithExtras },
         monthly,
         classSummary: classSummary.sort((a, b) => b.collected - a.collected),
       }
