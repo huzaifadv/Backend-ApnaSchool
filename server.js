@@ -58,6 +58,8 @@ import enhancedFeeRoutes from './routes/enhancedFeeRoutes.js';
 import studentFeeManagementRoutes from './routes/studentFeeManagementRoutes.js';
 import booksRoutes from './routes/books.js';
 import basketsRoutes from './routes/baskets.js';
+import papersRoutes from './routes/papers.js';
+import syllabusRoutes from './routes/syllabus.js';
 import errorHandler from './middleware/errorHandler.js';
 import initializeCronJobs from './config/cronJobs.js';
 
@@ -181,6 +183,8 @@ app.use('/api/admin/fees', enhancedFeeRoutes);               // Enhanced fee ope
 app.use('/api/admin/student-fees', studentFeeManagementRoutes); // Student fee profiles & monthly fee management
 app.use('/api/books', booksRoutes);
 app.use('/api/baskets', basketsRoutes);
+app.use('/api/papers', papersRoutes);
+app.use('/api/syllabus', syllabusRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

@@ -37,13 +37,38 @@ const generateStaffToken = (staff, schoolId) => {
 };
 
 /**
- * Check that the given classId is in staff's assignedClasses.
- * Returns the matched entry or null.
+ * Check that the given classId is in staff's assignedClasses OR they are the Class Teacher.
+ * Returns the matched entry or a simulated entry.
  */
-const getAssignedClass = (staff, classId) => {
-  return staff.assignedClasses.find(
+const getAssignedClass = async (req, classId) => {
+  // 1. Check assignedClasses array in staff document
+  const inArray = req.staff.assignedClasses.find(
     c => c.classId.toString() === classId.toString()
   );
+  if (inArray) return inArray;
+
+  // 2. Check if staff is the primary classTeacher for this class in Classes collection
+  try {
+    const Class = await getModel(req.schoolId, 'classes');
+    const isClassTeacher = await Class.findOne({ 
+      _id: classId, 
+      classTeacher: req.staffDbId.toString(), 
+      isActive: true 
+    });
+    
+    if (isClassTeacher) {
+      return {
+        classId: isClassTeacher._id,
+        className: isClassTeacher.className,
+        section: isClassTeacher.section,
+        subjects: [] // Default if not explicitly assigned in assignedClasses array
+      };
+    }
+  } catch (error) {
+    console.error('getAssignedClass error:', error);
+  }
+  
+  return null;
 };
 
 // ─── Authentication ───────────────────────────────────────────────────────────
@@ -253,8 +278,18 @@ export const getMyClasses = async (req, res) => {
   try {
     const Class = await getModel(req.schoolId, 'classes');
 
+    // Fetch classes from two sources:
+    // 1. Where staff is explicitly assigned in the assignedClasses array
+    // 2. Where staff is assigned as the primary Class Teacher
     const classIds = req.staff.assignedClasses.map(c => c.classId);
-    const classes = await Class.find({ _id: { $in: classIds }, isActive: true });
+    
+    const classes = await Class.find({
+      $or: [
+        { _id: { $in: classIds } },
+        { classTeacher: req.staffDbId.toString() }
+      ],
+      isActive: true
+    }).sort({ className: 1, section: 1 });
 
     return res.status(200).json({
       success: true,
@@ -298,7 +333,8 @@ export const getClassStudents = async (req, res) => {
     const { classId } = req.params;
 
     // ── Ownership guard: staff must be assigned to this class ────────────
-    if (!getAssignedClass(req.staff, classId)) {
+    const assigned = await getAssignedClass(req, classId);
+    if (!assigned) {
       return res.status(403).json({
         success: false,
         message: 'You are not assigned to this class'
@@ -344,7 +380,8 @@ export const markClassAttendance = async (req, res) => {
       });
     }
 
-    if (!getAssignedClass(req.staff, classId)) {
+    const assigned = await getAssignedClass(req, classId);
+    if (!assigned) {
       return res.status(403).json({
         success: false,
         message: 'You are not assigned to this class'
@@ -423,7 +460,8 @@ export const getMyClassAttendance = async (req, res) => {
     const { classId } = req.params;
     const { date, from, to } = req.query;
 
-    if (!getAssignedClass(req.staff, classId)) {
+    const assigned = await getAssignedClass(req, classId);
+    if (!assigned) {
       return res.status(403).json({
         success: false,
         message: 'You are not assigned to this class'
@@ -761,7 +799,8 @@ export const addMarksEntry = async (req, res) => {
     }
 
     // ── Class assignment guard ───────────────────────────────────────────
-    if (!getAssignedClass(req.staff, classId)) {
+    const assigned = await getAssignedClass(req, classId);
+    if (!assigned) {
       return res.status(403).json({
         success: false,
         message: 'You are not assigned to this class'
@@ -841,7 +880,8 @@ export const getMyMarks = async (req, res) => {
     const query = { staffId: req.staffDbId };
 
     if (classId) {
-      if (!getAssignedClass(req.staff, classId)) {
+      const assigned = await getAssignedClass(req, classId);
+      if (!assigned) {
         return res.status(403).json({
           success: false,
           message: 'You are not assigned to this class'
@@ -930,7 +970,8 @@ export const submitMonthlyReport = async (req, res) => {
       });
     }
 
-    if (!getAssignedClass(req.staff, classId)) {
+    const assigned = await getAssignedClass(req, classId);
+    if (!assigned) {
       return res.status(403).json({
         success: false,
         message: 'You are not assigned to this class'

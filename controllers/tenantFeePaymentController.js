@@ -1293,7 +1293,8 @@ export const getFeeAnalytics = async (req, res, next) => {
     const totalMonthlyFees = allStudents.reduce((s, st) => s + (st.totalMonthlyFee || st.monthlyFee || 0), 0);
 
     const totalCollected = validPayments.reduce((s, p) => s + (p.amountPaid || 0), 0);
-    const totalPending   = validPayments.reduce((s, p) => s + Math.max(0, p.remainingAmount || 0), 0);
+    // Recalculate pending from (amount - amountPaid) to avoid stale remainingAmount values
+    const totalPending   = validPayments.reduce((s, p) => s + Math.max(0, (p.amount || 0) - (p.amountPaid || 0)), 0);
     const totalStudents  = allStudents.length;
     const paidCount      = validPayments.filter(p => p.status === 'Paid').length;
     const partialCount   = validPayments.filter(p => p.status === 'Partial').length;
@@ -1312,7 +1313,7 @@ export const getFeeAnalytics = async (req, res, next) => {
         month: m,
         year: y,
         collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
-        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, p.remainingAmount || 0), 0)),
+        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, (p.amount || 0) - (p.amountPaid || 0)), 0)),
         count:     recs.length,
       });
     }
@@ -1327,7 +1328,7 @@ export const getFeeAnalytics = async (req, res, next) => {
       return {
         className: `${cls.className}-${cls.section}`,
         collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
-        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, p.remainingAmount || 0), 0)),
+        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, (p.amount || 0) - (p.amountPaid || 0)), 0)),
         students:  studs.length,
       };
     }));
