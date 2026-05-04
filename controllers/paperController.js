@@ -50,7 +50,10 @@ export const generatePaper = async (req, res) => {
     }
 
     // Build PDF
-    const doc = new PDFDocument({ margin: 72 });
+    const doc = new PDFDocument({ 
+      margins: { top: 57, bottom: 57, left: 71, right: 57 },
+      bufferPages: true 
+    });
     const filename = `paper-${Date.now()}.pdf`;
     const folderPath = path.join(process.cwd(), 'uploads', 'generated');
     if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
@@ -59,33 +62,69 @@ export const generatePaper = async (req, res) => {
     doc.pipe(writeStream);
 
     // Header: School Logo
+    const headerStartY = doc.y;
+    let hasLogo = false;
+    let logoBuffer = null;
+
     if (school && school.logo && school.logo.url) {
       try {
-        const logoUrl = school.logo.url.startsWith('http') ? school.logo.url : `${req.protocol}://${req.get('host')}${school.logo.url}`;
-        const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
-        const logoBuffer = Buffer.from(response.data, 'binary');
-        doc.image(logoBuffer, { fit: [80, 80], align: 'center' }).moveDown(1);
+        const logoUrl = school.logo.url;
+        if (logoUrl.startsWith('http')) {
+          const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
+          logoBuffer = Buffer.from(response.data, 'binary');
+        } else {
+          const localPath = path.join(process.cwd(), logoUrl);
+          if (fs.existsSync(localPath)) {
+            logoBuffer = fs.readFileSync(localPath);
+          }
+        }
+        
+        if (logoBuffer) {
+          // Max size 35x35mm (~99pt), top-left corner
+          doc.image(logoBuffer, 71, headerStartY, { fit: [99, 99] });
+          hasLogo = true;
+        }
       } catch (err) {
         console.error('Logo fetch failed', err.message);
       }
     }
 
-    // School Name & Address
-    doc.fontSize(20).font('Helvetica-Bold').text(school?.schoolName || 'School Name', { align: 'center' });
-    doc.fontSize(10).font('Helvetica').text(school?.address || '', { align: 'center' });
+    // School Name & Address (Centered)
+    const textStartX = hasLogo ? 180 : 71;
+    const headerTextWidth = doc.page.width - textStartX - 57;
+    
+    doc.y = headerStartY + (hasLogo ? 15 : 0); // Vertically align with logo
+    doc.fontSize(16).font('Helvetica-Bold').text(school?.schoolName || 'School Name', textStartX, doc.y, { align: 'center', width: headerTextWidth });
+    doc.fontSize(10).font('Helvetica').text(school?.address || '', textStartX, doc.y, { align: 'center', width: headerTextWidth });
     doc.moveDown(1);
 
-    // Exam Info
-    doc.fontSize(12).font('Helvetica-Bold').text(basket.examTitle, { align: 'center' });
-    doc.moveDown(0.5);
+    // Ensure y is below logo for the metadata section
+    const endHeaderY = Math.max(doc.y, headerStartY + 105);
+    doc.y = endHeaderY;
 
-    const subText = `Subject: ${subjectName} | Class: ${classDoc ? classDoc.className : 'N/A'} | Session: ${sessionYear}`;
-    const dateText = `Date: ${new Date().toLocaleDateString()} | Time: ${basket.timeAllowed} | Total Marks: ${basket.totalMarks}`;
+    // Exam Info
+    doc.fontSize(12).font('Helvetica-Bold').text(basket.examTitle, 71, doc.y, { align: 'center', width: doc.page.width - 71 - 57 });
+    doc.moveDown(1);
+
+    // Metadata Table
+    const tableWidth = doc.page.width - 71 - 57;
+    const col2X = 71 + (tableWidth / 2);
     
-    doc.fontSize(10).font('Helvetica').text(subText, { align: 'center' });
-    doc.text(dateText, { align: 'center' });
+    doc.fontSize(10).font('Helvetica');
+    const printRow = (leftText, rightText) => {
+      const startY = doc.y;
+      doc.text(leftText, 71, startY, { width: tableWidth / 2, align: 'left' });
+      const midY = doc.y;
+      doc.text(rightText, col2X, startY, { width: tableWidth / 2, align: 'left' });
+      doc.y = Math.max(midY, doc.y);
+    };
+
+    printRow(`Subject: ${subjectName}`, `Date: ${new Date().toLocaleDateString()}`);
+    printRow(`Class: ${classDoc ? classDoc.className : 'N/A'}`, `Time Allowed: ${basket.timeAllowed}`);
+    printRow(`Session: ${sessionYear}`, `Total Marks: ${basket.totalMarks}`);
+    
     doc.moveDown(0.5);
-    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveTo(71, doc.y).lineTo(doc.page.width - 57, doc.y).stroke();
     doc.moveDown(1);
 
     // Sections
@@ -93,16 +132,29 @@ export const generatePaper = async (req, res) => {
     const shorts = questions.filter(q => q.type === 'Short');
     const longs = questions.filter(q => q.type === 'Long');
 
+    const drawSectionHeader = (title) => {
+      // Check if we need a new page for the header to avoid orphans
+      if (doc.y + 40 > doc.page.height - 57) doc.addPage();
+      
+      const startY = doc.y;
+      doc.rect(71, startY, doc.page.width - 71 - 57, 22).fill('#f0f0f0');
+      doc.fillColor('black').fontSize(12).font('Helvetica-Bold').text(title, 75, startY + 6);
+      doc.y = startY + 22; // ensure we move below the rect
+      doc.moveDown(0.5);
+    };
+
     // Section A: MCQs
     if (mcqs.length > 0) {
-      doc.x = 72;
-      doc.fontSize(14).font('Helvetica-Bold').text('Section A: Multiple Choice Questions', 72, doc.y, { width: 460, align: 'left' });
-      doc.moveDown(1);
+      doc.x = 71;
+      drawSectionHeader('Section A: Multiple Choice Questions');
       mcqs.forEach((q, i) => {
+        // Prevent question from splitting awkwardly if possible
+        if (doc.y + 60 > doc.page.height - 57) doc.addPage();
+        
         const startY = doc.y;
-        doc.fontSize(11).font('Helvetica').text(`${i + 1}. ${q.questionText}`, 72, startY, { width: 380, align: 'left' });
+        doc.fontSize(11).font('Helvetica').text(`${i + 1}. ${q.questionText}`, 71, startY, { width: doc.page.width - 71 - 57 - 80, align: 'left' });
         const endY = doc.y;
-        doc.fontSize(10).text(`(${q.marks} Marks)`, 460, startY, { width: 80, align: 'right' });
+        doc.fontSize(10).text(`(${q.marks} Marks)`, doc.page.width - 57 - 80, startY, { width: 80, align: 'right' });
         doc.y = Math.max(endY, doc.y);
         doc.moveDown(0.5);
         
@@ -110,43 +162,59 @@ export const generatePaper = async (req, res) => {
         const opts = q.options || [];
         const labels = ['(A)', '(B)', '(C)', '(D)'];
         opts.forEach((opt, idx) => {
-          doc.text(`${labels[idx]} ${opt}`, 90, doc.y, { width: 400, align: 'left' }); // Indented x=90
+          // 30mm indent from the left edge of the page (~85pt)
+          doc.text(`${labels[idx]} ${opt}`, 85, doc.y, { width: doc.page.width - 85 - 57, align: 'left' }); 
+          doc.moveDown(0.2);
         });
         doc.moveDown(1.5);
       });
-      doc.moveDown(2);
+      doc.moveDown(1);
     }
 
     // Section B: Short Questions
     if (shorts.length > 0) {
-      doc.x = 72;
-      doc.fontSize(14).font('Helvetica-Bold').text('Section B: Short Questions', 72, doc.y, { width: 460, align: 'left' });
-      doc.moveDown(1);
+      doc.x = 71;
+      drawSectionHeader('Section B: Short Questions');
       shorts.forEach((q, i) => {
+        if (doc.y + 30 > doc.page.height - 57) doc.addPage();
+        
         const startY = doc.y;
-        doc.fontSize(11).font('Helvetica').text(`${i + 1}. ${q.questionText}`, 72, startY, { width: 380, align: 'left' });
+        doc.fontSize(11).font('Helvetica').text(`${i + 1}. ${q.questionText}`, 71, startY, { width: doc.page.width - 71 - 57 - 80, align: 'left' });
         const endY = doc.y;
-        doc.fontSize(10).text(`(${q.marks} Marks)`, 460, startY, { width: 80, align: 'right' });
+        doc.fontSize(10).text(`(${q.marks} Marks)`, doc.page.width - 57 - 80, startY, { width: 80, align: 'right' });
         doc.y = Math.max(endY, doc.y);
-        doc.moveDown(1);
+        doc.moveDown(1.5);
       });
-      doc.moveDown(2);
+      doc.moveDown(1);
     }
 
     // Section C: Long Questions
     if (longs.length > 0) {
-      doc.x = 72;
-      doc.fontSize(14).font('Helvetica-Bold').text('Section C: Long Questions', 72, doc.y, { width: 460, align: 'left' });
-      doc.moveDown(1);
+      doc.x = 71;
+      drawSectionHeader('Section C: Long Questions');
       longs.forEach((q, i) => {
+        if (doc.y + 30 > doc.page.height - 57) doc.addPage();
+        
         const startY = doc.y;
-        doc.fontSize(11).font('Helvetica').text(`${i + 1}. ${q.questionText}`, 72, startY, { width: 380, align: 'left' });
+        doc.fontSize(11).font('Helvetica').text(`${i + 1}. ${q.questionText}`, 71, startY, { width: doc.page.width - 71 - 57 - 80, align: 'left' });
         const endY = doc.y;
-        doc.fontSize(10).text(`(${q.marks} Marks)`, 460, startY, { width: 80, align: 'right' });
+        doc.fontSize(10).text(`(${q.marks} Marks)`, doc.page.width - 57 - 80, startY, { width: 80, align: 'right' });
         doc.y = Math.max(endY, doc.y);
         doc.moveDown(1.5);
       });
-      doc.moveDown(2);
+      doc.moveDown(1);
+    }
+
+    // Page Numbers
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc.fontSize(10).font('Helvetica').text(
+        `Page ${i + 1} of ${range.count}`,
+        71,
+        doc.page.height - 40,
+        { align: 'center', width: doc.page.width - 71 - 57 }
+      );
     }
 
     doc.end();

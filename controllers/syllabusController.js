@@ -8,11 +8,11 @@ import { getModel } from '../models/dynamicModels.js';
 
 export const generateSyllabus = async (req, res) => {
   try {
-    const { topics, classId, subjectId, sessionYear } = req.body;
+    const { syllabus, classId, subjectId, sessionYear } = req.body;
     const schoolId = req.schoolId;
 
-    if (!topics || !Array.isArray(topics) || topics.length === 0) {
-      return res.status(400).json({ success: false, message: 'Topics are required' });
+    if (!syllabus || !Array.isArray(syllabus) || syllabus.length === 0) {
+      return res.status(400).json({ success: false, message: 'Syllabus content is required' });
     }
 
     const school = await School.findById(schoolId);
@@ -21,7 +21,11 @@ export const generateSyllabus = async (req, res) => {
     const Class = await getModel(schoolId, 'classes');
     const classDoc = await Class.findById(classId);
 
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({ 
+      margins: { top: 57, bottom: 57, left: 71, right: 57 },
+      bufferPages: true 
+    });
+    
     const filename = `syllabus-${Date.now()}.pdf`;
     const folderPath = path.join(process.cwd(), 'uploads', 'generated');
     if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
@@ -29,45 +33,106 @@ export const generateSyllabus = async (req, res) => {
     const writeStream = fs.createWriteStream(pdfPath);
     doc.pipe(writeStream);
 
-    // Header
+    // Header: School Logo
+    const headerStartY = doc.y;
+    let hasLogo = false;
+    let logoBuffer = null;
+
     if (school && school.logo && school.logo.url) {
       try {
-        const logoUrl = school.logo.url.startsWith('http') ? school.logo.url : `${req.protocol}://${req.get('host')}${school.logo.url}`;
-        const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
-        doc.image(Buffer.from(response.data, 'binary'), { fit: [80, 80], align: 'center' }).moveDown(1);
-      } catch (err) {}
+        const logoUrl = school.logo.url;
+        if (logoUrl.startsWith('http')) {
+          const response = await axios.get(logoUrl, { responseType: 'arraybuffer' });
+          logoBuffer = Buffer.from(response.data, 'binary');
+        } else {
+          const localPath = path.join(process.cwd(), logoUrl);
+          if (fs.existsSync(localPath)) {
+            logoBuffer = fs.readFileSync(localPath);
+          }
+        }
+        
+        if (logoBuffer) {
+          // Max size 35x35mm (~99pt), top-left corner
+          doc.image(logoBuffer, 71, headerStartY, { fit: [99, 99] });
+          hasLogo = true;
+        }
+      } catch (err) {
+        console.error('Logo fetch failed', err.message);
+      }
     }
 
-    doc.fontSize(20).font('Helvetica-Bold').text(school?.schoolName || 'School Name', { align: 'center' });
-    doc.fontSize(16).text('Syllabus', { align: 'center' });
-    doc.moveDown(0.5);
-
-    doc.fontSize(11).font('Helvetica').text(`Class: ${classDoc ? classDoc.className : classId} | Subject: ${subjectId} | Year: ${sessionYear}`, { align: 'center' });
-    doc.moveDown(0.5);
-    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    // School Name & Address (Centered)
+    const textStartX = hasLogo ? 180 : 71;
+    const headerTextWidth = doc.page.width - textStartX - 57;
+    
+    doc.y = headerStartY + (hasLogo ? 15 : 0); // Vertically align with logo
+    doc.fontSize(16).font('Helvetica-Bold').text(school?.schoolName || 'School Name', textStartX, doc.y, { align: 'center', width: headerTextWidth });
+    doc.fontSize(10).font('Helvetica').text(school?.address || '', textStartX, doc.y, { align: 'center', width: headerTextWidth });
     doc.moveDown(1);
 
-    // Body—Topic Table
-    topics.forEach((topic) => {
-      let indent = 0;
-      let font = 'Helvetica';
-      let fontSize = 11;
+    // Ensure y is below logo for the metadata section
+    const endHeaderY = Math.max(doc.y, headerStartY + 105);
+    doc.y = endHeaderY;
 
-      if (topic.type === 'Chapter Heading') {
-        indent = 0;
-        font = 'Helvetica-Bold';
-        fontSize = 12;
-        doc.moveDown(0.5);
-      } else if (topic.type === 'Topic') {
-        indent = 20;
-      } else if (topic.type === 'Sub-topic') {
-        indent = 40;
-        fontSize = 10;
-      }
+    // Horizontal divider line after header
+    doc.moveTo(71, doc.y).lineTo(doc.page.width - 57, doc.y).stroke();
+    doc.moveDown(1);
 
-      doc.fontSize(fontSize).font(font).text(topic.text, 50 + indent);
-      doc.moveDown(0.2);
+    // Syllabus Title
+    doc.fontSize(16).font('Helvetica-Bold').text('Syllabus', 71, doc.y, { align: 'center', width: doc.page.width - 71 - 57 });
+    doc.moveDown(0.5);
+
+    doc.fontSize(11).font('Helvetica').text(`Class: ${classDoc ? classDoc.className : classId} | Subject: ${subjectId} | Year: ${sessionYear}`, 71, doc.y, { align: 'center', width: doc.page.width - 71 - 57 });
+    doc.moveDown(0.5);
+    
+    doc.moveTo(71, doc.y).lineTo(doc.page.width - 57, doc.y).stroke();
+    doc.moveDown(1);
+
+    // Body—Syllabus Outline
+    syllabus.forEach((term) => {
+      // Term: Bold 14pt with full-width colored header bar #2C3E50
+      if (doc.y + 40 > doc.page.height - 57) doc.addPage();
+
+      const startY = doc.y;
+      doc.rect(71, startY, doc.page.width - 71 - 57, 24).fill('#2C3E50');
+      doc.fillColor('white').fontSize(14).font('Helvetica-Bold').text(term.title, 75, startY + 6);
+      doc.fillColor('black'); // Reset to black
+      doc.y = startY + 24; // Move past the rect
+      doc.moveDown(0.5);
+
+      term.chapters.forEach((chapter) => {
+        if (doc.y + 20 > doc.page.height - 57) doc.addPage();
+        
+        // Chapter: Bold 11pt, indented 15mm (42.5pt) from left margin
+        const chapterIndentX = 71 + 42.5;
+        doc.fontSize(11).font('Helvetica-Bold').text(chapter.title, chapterIndentX, doc.y);
+        doc.y += 8; // Spacing 8pt
+
+        chapter.topics.forEach((topic) => {
+          if (doc.y + 15 > doc.page.height - 57) doc.addPage();
+          
+          // Topic: Regular 10pt, indented 25mm (71pt) from left margin
+          const topicIndentX = 71 + 71;
+          doc.fontSize(10).font('Helvetica').text(topic.title, topicIndentX, doc.y);
+          doc.y += 8; // Spacing 8pt
+        });
+        
+        doc.y += 8; // Extra spacing after chapter
+      });
+      doc.moveDown(1);
     });
+
+    // Page Numbers
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc.fontSize(10).font('Helvetica').text(
+        `Page ${i + 1} of ${range.count}`,
+        71,
+        doc.page.height - 40,
+        { align: 'center', width: doc.page.width - 71 - 57 }
+      );
+    }
 
     doc.end();
 
@@ -91,6 +156,8 @@ export const generateSyllabus = async (req, res) => {
     res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
   }
 };
+
+export default { generateSyllabus };
 
 export const getSyllabusHistory = async (req, res) => {
   try {

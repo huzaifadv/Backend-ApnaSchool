@@ -1,0 +1,32 @@
+[33mf2e5674[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Resolve merge conflicts and update files
+[33m4b7552b[m Latest Changes
+[33m4eafc91[m Merge pull request #7 from huzaifadv/misbah
+[33m821e461[m misbah changes
+[33m70e0340[m Merge pull request #5 from huzaifadv/laiba
+[33mb7e0aa0[m Merge pull request #6 from huzaifadv/misbah
+[33m6c9b89b[m Merge branch 'misbah' of https://github.com/huzaifadv/Backend-ApnaSchool into misbah
+[33mebb99e3[m misbah changes
+[33mc756b0e[m Resolve issue
+[33mf07c2f1[m fix: resolve student and staff creation validation errors by correcting middleware order
+[33m4ff87c9[m Merge pull request #4 from huzaifadv/laiba
+[33m836a7a2[m fix: resolve duplicate declaration of Class in tenantStudentController
+[33mdddcc1c[m fix: resolve merge conflicts after instructor merge
+[33m5708d26[m Merge pull request #3 from huzaifadv/laiba
+[33m1442291[m Merge branch 'main' into laiba
+[33m39351fb[m laiba changes
+[33m452ed53[m DONE
+[33ma2658c3[m Merge branch 'main' into misbah
+[33m56e77a3[m Merge pull request #2 from huzaifadv/laiba
+[33m00b2b24[m fix: resolve merge conflicts in studentRoutes.js
+[33mfd0f4b0[m feat(profile-picture): implement profile picture upload API for students and staff
+[33m96c4a07[m Backend: F-02 ID Card Generator API with PDFKit
+[33m221441f[m Issues Resolved acedemic year
+[33ma3a05b9[m DONE
+[33m36e5e47[m CORS Added
+[33m3dee1be[m latest Changes
+[33meaae6ee[m All Issues Resolved
+[33mc1f7daa[m DONE
+[33m7a3d846[m Cors Issues Solved
+[33ma776e83[m Issues Resolved
+[33m78703cf[m Invoice History Feature Added
+[33m61b6d47[m fresh start
