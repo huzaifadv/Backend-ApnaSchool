@@ -177,11 +177,12 @@ export const getAllStaff = async (req, res) => {
     const staffWithSalary = await Promise.all(staff.map(async (s) => {
       const latestSalary = await SalaryHistory.findOne({ staffId: s._id })
         .sort({ year: -1, month: -1 })
-        .select('_id status');
-      
+        .select('_id status basicSalary netSalary');
+
       const obj = s.toObject();
       obj.latestSalaryStatus = latestSalary?.status || null;
       obj.latestSalaryId = latestSalary?._id || null;
+      obj.latestBasicSalary = latestSalary?.basicSalary || null;
 
       // ── Enhance assignedClasses with classes where they are the primary Class Teacher ──
       // Some classes might be assigned as Class Teacher but not in the assignedClasses array (legacy or manual sync)

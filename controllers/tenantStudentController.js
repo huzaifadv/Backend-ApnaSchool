@@ -9,6 +9,24 @@ import { resolveAcademicYear } from '../utils/academicYearResolver.js';
  * All operations use dynamic database connections based on schoolId
  */
 
+const generateStudentId = async (Student, schoolName) => {
+  const prefix = schoolName.trim().split(/\s+/)[0].toLowerCase();
+  let studentId;
+  let isUnique = false;
+  let attempts = 0;
+
+  while (!isUnique && attempts < 20) {
+    const num = Math.floor(10000 + Math.random() * 90000); // always 5 digits
+    studentId = `${prefix}-${num}`;
+    const existing = await Student.findOne({ studentId });
+    if (!existing) isUnique = true;
+    attempts++;
+  }
+
+  if (!isUnique) throw new Error('Failed to generate unique student ID. Please try again.');
+  return studentId;
+};
+
 /**
  * Generate a unique 8-character alphanumeric parent access code for tenant database
  */
@@ -148,13 +166,15 @@ export const createStudent = async (req, res, next) => {
       });
     }
 
-    // Generate unique parent access code
+    // Generate unique parent access code and student ID
     const parentAccessCode = await generateParentAccessCodeForTenant(Student);
+    const studentId = await generateStudentId(Student, school.schoolName);
 
     // Create student in tenant database
     const student = await Student.create({
       classId,
       rollNumber,
+      studentId,
       fullName,
       email,
       phone,
