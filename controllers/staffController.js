@@ -540,7 +540,7 @@ export const addSalaryRecord = async (req, res) => {
       });
     }
 
-    const netSalary = basicSalary + allowances - deductions;
+    const netSalary = basicSalary - deductions;
     const paid = Number(amountPaid) || 0;
 
     // Auto-calculate status from amountPaid
@@ -684,8 +684,8 @@ export const updateSalaryRecord = async (req, res) => {
     if (remarks !== undefined) record.remarks = remarks;
     if (amountPaid !== undefined) record.amountPaid = Number(amountPaid) || 0;
 
-    // Recalculate netSalary
-    record.netSalary = record.basicSalary + record.allowances - record.deductions;
+    // Recalculate netSalary (allowances are extra, not part of net)
+    record.netSalary = record.basicSalary - record.deductions;
 
     // Auto-calculate status from amountPaid (override manual status)
     const paid = record.amountPaid || 0;
