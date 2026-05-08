@@ -14,6 +14,21 @@ import { protectStaff } from '../middleware/staffAuthMiddleware.js';
 import { uploadStaffPhoto } from '../config/multer.js';
 import { staffUpload } from '../middleware/uploadProfile.js';
 import {
+  getBooks,
+  createBook,
+  deleteBook,
+  getChapters,
+  createChapter,
+  getChapter,
+  updateChapter,
+  deleteChapter,
+  generatePaper,
+  regeneratePaper,
+  getExamHistory,
+  getExamById,
+  deleteExam
+} from '../controllers/examController.js';
+import {
   staffLogin,
   getMyProfile,
   updateMyProfile,
@@ -108,5 +123,20 @@ router.get('/salary', getMySalaryHistory);
 router.get('/notices/unread-count', getUnreadNoticeCount);
 router.get('/notices', getMyNotices);
 router.post('/notices/mark-read', markNoticesRead);
+
+// ── Exam Paper Generator ───────────────────────────────────────────────────────
+router.get('/exam/books',                         getBooks);
+router.post('/exam/books',                        createBook);
+router.delete('/exam/books/:bookId',              deleteBook);
+router.get('/exam/books/:bookId/chapters',        getChapters);
+router.post('/exam/books/:bookId/chapters',       createChapter);
+router.get('/exam/chapters/:chapterId',           getChapter);
+router.put('/exam/chapters/:chapterId',           updateChapter);
+router.delete('/exam/chapters/:chapterId',        deleteChapter);
+router.post('/exam/generate',                     generatePaper);
+router.post('/exam/regenerate/:examId',           regeneratePaper);
+router.get('/exam/history',                       getExamHistory);
+router.get('/exam/history/:examId',               getExamById);
+router.delete('/exam/history/:examId',            deleteExam);
 
 export default router;

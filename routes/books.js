@@ -5,12 +5,13 @@ import { protectStaff } from '../middleware/staffAuthMiddleware.js';
 import Book from '../models/Book.js';
 import BookPage from '../models/BookPage.js';
 import parseBook from '../jobs/parseBook.js';
+import parseDriveBook from '../jobs/parseDriveBook.js';
 
 const router = express.Router();
 
 router.post('/upload', protectStaff, upload.single('file'), async (req, res) => {
   try {
-    const { subjectId, classId } = req.body;
+    const { subjectId, classId, title } = req.body;
 
     // Use JWT-extracted values — guaranteed to be correct
     const schoolId = req.schoolId || req.body.schoolId;
@@ -48,6 +49,7 @@ router.post('/upload', protectStaff, upload.single('file'), async (req, res) => 
       schoolId,
       subjectId,
       classId,
+      title: title || '',
       fileName: req.file.originalname,
       gridFsId,
       uploadedBy: uploadedBy || 'unknown',
@@ -66,6 +68,57 @@ router.post('/upload', protectStaff, upload.single('file'), async (req, res) => 
 
   } catch (error) {
     console.error('Upload Error:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Internal Server Error' });
+  }
+});
+
+// ── Google Drive link upload ──────────────────────────────────────────────────
+router.post('/upload-link', protectStaff, async (req, res) => {
+  try {
+    const { title, subjectId, classId, driveLink } = req.body;
+    const schoolId   = req.schoolId;
+    const uploadedBy = req.staffDbId?.toString() || 'unknown';
+
+    if (!title || !subjectId || !classId || !driveLink) {
+      return res.status(400).json({ error: 'title, subjectId, classId and driveLink are required' });
+    }
+
+    // Extract file ID from Drive share link formats:
+    // https://drive.google.com/file/d/FILE_ID/view...
+    // https://drive.google.com/open?id=FILE_ID
+    // https://drive.google.com/uc?id=FILE_ID
+    const idMatch = driveLink.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+    const idMatch2 = driveLink.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+    const driveFileId = idMatch?.[1] || idMatch2?.[1];
+
+    if (!driveFileId) {
+      return res.status(400).json({ error: 'Invalid Google Drive link. Please use the "Share" link (e.g. https://drive.google.com/file/d/ID/view)' });
+    }
+
+    const newBook = new Book({
+      schoolId,
+      subjectId,
+      classId,
+      title,
+      fileName: title,
+      driveLink,
+      driveFileId,
+      source: 'drive',
+      uploadedBy,
+      status: 'processing'
+    });
+    await newBook.save();
+
+    // Parse in background — do not await
+    parseDriveBook(newBook._id, driveFileId);
+
+    return res.json({
+      success: true,
+      bookId: newBook._id,
+      message: 'Book link added. Processing will complete shortly (1-2 minutes).'
+    });
+  } catch (error) {
+    console.error('Drive Upload Error:', error);
     return res.status(500).json({ success: false, error: error.message || 'Internal Server Error' });
   }
 });
