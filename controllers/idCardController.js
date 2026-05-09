@@ -126,13 +126,13 @@ function drawSignature(doc, principalName, x, y, w, color) {
   const c = color || '#111111';
   const name = principalName || 'Principal';
   // Name ABOVE the line - use fitText to prevent wrapping/overlap
-  const sigFs = fitText(doc, name, w, 'Times-BoldItalic', 10, 6);
+  const sigFs = fitText(doc, name, w, 'Times-BoldItalic', 8, 5);
   doc.fillColor(c).font('Times-BoldItalic').fontSize(sigFs)
-    .text(name, x, y - sigFs - 2, { width: w, align: 'center', lineBreak: false });
+    .text(name, x, y - sigFs - 1, { width: w, align: 'center', lineBreak: false });
   // The line
   doc.strokeColor(c).lineWidth(0.5).moveTo(x, y - 1).lineTo(x + w, y - 1).stroke();
   // Label below the line
-  doc.fillColor(c).font('Helvetica-Bold').fontSize(5.5).text('Principal Signature', x, y + 2, { width: w, align: 'center', lineBreak: false });
+  doc.fillColor(c).font('Helvetica-Bold').fontSize(5).text('Principal Signature', x, y + 1.5, { width: w, align: 'center', lineBreak: false });
   doc.restore();
 }
 
@@ -1127,7 +1127,7 @@ export const getStaffForIDCard = async (req, res) => {
   try {
     const { schoolId } = req;
     const Staff = await getModel(schoolId, 'staffs');
-    const staff = await Staff.find({ status: 'active' }).select('name staffId designation profilePicture contact').lean();
+    const staff = await Staff.find({ status: 'active' }).select('name staffId role designation profilePicture contact').lean();
     res.status(200).json({ success: true, data: staff });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error fetching staff' });
