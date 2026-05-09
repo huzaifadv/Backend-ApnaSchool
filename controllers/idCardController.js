@@ -6,33 +6,28 @@ import School from '../models/School.js';
 const MM = 2.83465;
 const A4W = 595.28, A4H = 841.89;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+const PORTRAIT_TEMPLATES = ['student-red-vertical', 'security-red-vertical', 'staff-purple-vertical'];
+const LANDSCAPE_TEMPLATES = [];
 
 function dims(cw, ch, tpl) {
-  // class-monitor-horizontal is NOW landscape
-  const portrait = ['student-vertical-blue', 'staff-vertical-orange', 'position-holder-black-gold'];
-  const landscape = [
-    'student-horizontal-wave', 'teacher-horizontal-green',
-    'security-horizontal-red', 'support-staff-horizontal-purple',
-    'class-monitor-horizontal'   // CHANGED: was class-monitor-vertical
-  ];
   let w = (cw ? +cw : 85.6) * MM, h = (ch ? +ch : 54) * MM;
-  const forceV = portrait.includes(tpl), forceH = landscape.includes(tpl);
-  if (forceV && w > h) [w, h] = [h, w];
-  if (forceH && h > w) [w, h] = [h, w];
+  if (PORTRAIT_TEMPLATES.includes(tpl) && w > h) [w, h] = [h, w];
+  if (LANDSCAPE_TEMPLATES.includes(tpl) && h > w) [w, h] = [h, w];
   return { w, h };
 }
 
 function hexRgb(hex) {
-  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#6b21a8');
-  return r ? [parseInt(r[1], 16), parseInt(r[2], 16), parseInt(r[3], 16)] : [107, 33, 168];
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#c0392b');
+  return r ? [parseInt(r[1], 16), parseInt(r[2], 16), parseInt(r[3], 16)] : [192, 57, 43];
 }
 
 function darken(hex, p = 0.25) {
   return '#' + hexRgb(hex).map(c => Math.max(0, Math.round(c * (1 - p))).toString(16).padStart(2, '0')).join('');
 }
 
-function lighten(hex, p = 0.88) {
+function lighten(hex, p = 0.8) {
   return '#' + hexRgb(hex).map(c => Math.min(255, Math.round(c + (255 - c) * p)).toString(16).padStart(2, '0')).join('');
 }
 
@@ -43,627 +38,1074 @@ function formatDate(val) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+function resolveColor(primaryColor, def) {
+  if (!primaryColor || primaryColor === '#2b6cb0') return def;
+  return primaryColor;
+}
+
+function titleCase(str) {
+  if (!str) return '';
+  return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
 async function fetchBuf(url, req) {
-  if (!url || url.includes('default-')) return null;
+  if (!url) return null;
   try {
-    let fullUrl = url;
+    console.log('[IDCard] Fetching buffer for:', url.substring(0, 100));
+    let finalUrl = url;
     if (!url.startsWith('http')) {
-      const host = req ? req.get('host') : 'localhost:5000';
-      const proto = req ? req.protocol : 'http';
-      fullUrl = `${proto}://${host}${url.startsWith('/') ? '' : '/'}${url}`;
+      const protocol = req?.headers?.['x-forwarded-proto'] || req?.protocol || 'http';
+      const host = req?.headers?.host || 'localhost:5000';
+      finalUrl = `${protocol}://${host}/${url.replace(/^\/+/, '')}`;
     }
-    const res = await axios.get(fullUrl, { responseType: 'arraybuffer', timeout: 8000 });
-    return Buffer.from(res.data, 'binary');
-  } catch (e) {
-    console.warn('[IDCard] fetchBuf failed for:', url, e.message);
+    const response = await axios.get(finalUrl, { responseType: 'arraybuffer', timeout: 6000 });
+    return Buffer.from(response.data);
+  } catch (err) {
+    console.error('fetchBuf error for:', url, err.message);
     return null;
   }
 }
 
-// Resolve color — use template default if generic blue passed
-function resolveColor(primaryColor, defaultColor) {
-  if (!primaryColor || primaryColor === '#2b6cb0') return defaultColor;
-  return primaryColor;
-}
-
-// Watermark
 function wm(doc, x, y, w, h, logo) {
   if (!logo) return;
-  doc.save();
-  doc.opacity(0.06);
+  doc.save(); doc.opacity(0.06);
   const s = Math.min(w, h) * 0.65;
   try { doc.image(logo, x + (w - s) / 2, y + (h - s) / 2, { width: s, height: s }); } catch { }
   doc.restore();
 }
 
-// Draw photo — square, silhouette fallback
-function drawPhoto(doc, buf, x, y, w, h) {
+function drawCircularPhoto(doc, buf, cx, cy, r, borderColor, borderWidth) {
   doc.save();
-  doc.rect(x, y, w, h).fill('#e0e0e0');
+  doc.circle(cx, cy, r + (borderWidth || 2)).lineWidth(borderWidth || 2).strokeColor(borderColor || '#ffffff').stroke();
+  doc.circle(cx, cy, r).clip();
+  doc.circle(cx, cy, r).fill('#e0e0e0');
   if (!buf) {
-    const cx = x + w / 2;
-    doc.circle(cx, y + h * 0.33, w * 0.19).fill('#b5b5b5');
-    doc.ellipse(cx, y + h * 0.73, w * 0.28, h * 0.22).fill('#b5b5b5');
+    doc.circle(cx, cy - r * 0.15, r * 0.32).fill('#b5b5b5');
+    doc.ellipse(cx, cy + r * 0.55, r * 0.45, r * 0.32).fill('#b5b5b5');
   } else {
-    try { doc.image(buf, x, y, { width: w, height: h, cover: [w, h], align: 'center', valign: 'center' }); } catch { }
+    try { doc.image(buf, cx - r, cy - r, { width: r * 2, height: r * 2, cover: [r * 2, r * 2], align: 'center', valign: 'center' }); } catch { }
   }
   doc.restore();
 }
 
-// Draw logo — image if available, white graduation cap icon otherwise (no bg box on colored headers)
-function drawLogo(doc, x, y, size, logoBuf, needsBgOnWhite, bgColor) {
+function drawSquarePhoto(doc, buf, px, py, pw, ph, radius = 4) {
+  doc.save();
+  // Rounded rect clip
+  doc.roundedRect(px, py, pw, ph, radius).clip();
+  doc.rect(px, py, pw, ph).fill('#e0e0e0');
+  if (!buf) {
+    const cx = px + pw / 2, cy = py + ph / 2;
+    doc.circle(cx, cy - ph * 0.12, pw * 0.22).fill('#b5b5b5');
+    doc.ellipse(cx, cy + ph * 0.22, pw * 0.32, ph * 0.22).fill('#b5b5b5');
+  } else {
+    try { doc.image(buf, px, py, { width: pw, height: ph, cover: [pw, ph], align: 'center', valign: 'center' }); } catch { }
+  }
+  doc.restore();
+}
+
+function drawLogo(doc, x, y, size, logoBuf) {
   if (logoBuf) {
-    doc.save();
     try {
-      doc.image(logoBuf, x, y, { width: size, height: size, fit: [size, size], align: 'center', valign: 'center' });
+      doc.image(logoBuf, x, y, { fit: [size, size], align: 'center', valign: 'center' });
     } catch (e) {
-      console.warn('[IDCard] logo draw failed:', e.message);
+      console.error('Logo draw error:', e.message);
+      // Fallback: draw a colored placeholder if image fails
+      doc.rect(x, y, size, size).fill('#f0f0f0');
+      doc.fontSize(4).fillColor('#999').text('LOGO ERR', x, y + size / 2, { width: size, align: 'center' });
     }
-    doc.restore();
   } else {
-    // On white headers we need a colored background so white icon is visible
-    if (needsBgOnWhite && bgColor) {
-      doc.save();
-      doc.rect(x, y, size, size).fill(bgColor);
-      doc.restore();
-    }
-    // White cap icon
-    doc.save();
-    doc.fillColor('#ffffff').opacity(0.92);
-    const cx = x + size * 0.5, cy = y + size * 0.48, s = size * 0.3;
-    doc.moveTo(cx, cy - s * 0.55).lineTo(cx + s, cy).lineTo(cx, cy + s * 0.45).lineTo(cx - s, cy).closePath().fill();
-    doc.rect(cx - s * 0.32, cy + s * 0.08, s * 0.64, s * 0.28).fill();
-    doc.restore();
+    // If no logo buffer, draw a subtle placeholder to show it's missing
+    doc.rect(x, y, size, size).lineWidth(0.2).dash(2, { space: 2 }).strokeColor('#dddddd').stroke();
+    doc.fontSize(4).fillColor('#cccccc').text('NO LOGO', x, y + size / 2, { width: size, align: 'center' });
   }
 }
 
-// Field row
-function fRow(doc, label, value, lx, vx, y, fs, lc, vc) {
-  doc.fillColor(lc || '#555').font('Helvetica').fontSize(fs).text(label, lx, y, { lineBreak: false });
-  doc.fillColor(lc || '#555').font('Helvetica').fontSize(fs).text(' :', lx + doc.widthOfString(label), y, { lineBreak: false });
-  doc.fillColor(vc || '#111').font('Helvetica-Bold').fontSize(fs).text(String(value || 'N/A'), vx, y, { lineBreak: false });
-}
-
-// Footer
-function footer(doc, x, y, w, h, color, textColor) {
-  const fh = h * 0.08, fy = y + h - fh;
-  doc.rect(x, fy, w, fh).fill(color);
-  doc.fillColor(textColor || '#fff').font('Helvetica-Bold').fontSize(Math.max(fh * 0.32, 7))
-    .text('www.apnaschooledu.com', x, fy + fh * 0.28, { width: w, align: 'center', lineBreak: false });
-}
-
-// Signature — small, right side, vertical cards
-function sigRightV(doc, x, y, w, h, lineColor) {
-  const sigY = y + h * 0.882;
-  const x1 = x + w * 0.52, x2 = x + w * 0.93;
+// Draw cursive-style principal signature
+function drawSignature(doc, principalName, x, y, w, color) {
   doc.save();
-  doc.strokeColor(lineColor || '#cccccc').lineWidth(0.5).moveTo(x1, sigY).lineTo(x2, sigY).stroke();
+  const c = color || '#111111';
+  const name = principalName || 'Principal';
+  // Name ABOVE the line - use fitText to prevent wrapping/overlap
+  const sigFs = fitText(doc, name, w, 'Times-BoldItalic', 10, 6);
+  doc.fillColor(c).font('Times-BoldItalic').fontSize(sigFs)
+    .text(name, x, y - sigFs - 2, { width: w, align: 'center', lineBreak: false });
+  // The line
+  doc.strokeColor(c).lineWidth(0.5).moveTo(x, y - 1).lineTo(x + w, y - 1).stroke();
+  // Label below the line
+  doc.fillColor(c).font('Helvetica-Bold').fontSize(5.5).text('Principal Signature', x, y + 2, { width: w, align: 'center', lineBreak: false });
   doc.restore();
-  doc.fillColor('#999').font('Helvetica').fontSize(Math.max(h * 0.019, 5.5))
-    .text('Principal Signature', x1, sigY + 2.5, { width: x2 - x1, align: 'center', lineBreak: false });
 }
 
-// Signature — small, right side, horizontal cards
-function sigRightH(doc, rx, rw, sigY, lineColor) {
-  const x1 = rx + rw * 0.42, x2 = rx + rw * 0.97;
+
+// Draw a fake QR code placeholder
+function drawQR(doc, x, y, size, color) {
   doc.save();
-  doc.strokeColor(lineColor || '#cccccc').lineWidth(0.5).moveTo(x1, sigY).lineTo(x2, sigY).stroke();
+  const c = color || '#333333';
+  const cell = size / 7;
+  doc.rect(x, y, size, size).lineWidth(0.5).strokeColor(c).stroke();
+  doc.rect(x + cell * 0.5, y + cell * 0.5, cell * 2, cell * 2).lineWidth(0.5).strokeColor(c).stroke();
+  doc.rect(x + cell * 0.8, y + cell * 0.8, cell * 1.4, cell * 1.4).fill(c);
+  doc.rect(x + cell * 4.5, y + cell * 0.5, cell * 2, cell * 2).lineWidth(0.5).strokeColor(c).stroke();
+  doc.rect(x + cell * 4.8, y + cell * 0.8, cell * 1.4, cell * 1.4).fill(c);
+  doc.rect(x + cell * 0.5, y + cell * 4.5, cell * 2, cell * 2).lineWidth(0.5).strokeColor(c).stroke();
+  doc.rect(x + cell * 0.8, y + cell * 4.8, cell * 1.4, cell * 1.4).fill(c);
+  const dots = [
+    [3, 1], [5, 1], [6, 2], [3, 3], [4, 3], [6, 3], [1, 4], [2, 4], [4, 4], [6, 4], [1, 5], [3, 5], [5, 5], [2, 6], [4, 6], [5, 6]
+  ];
+  dots.forEach(([col, row]) => {
+    doc.rect(x + col * cell + cell * 0.1, y + row * cell + cell * 0.1, cell * 0.8, cell * 0.8).fill(c);
+  });
   doc.restore();
-  doc.fillColor('#999').font('Helvetica').fontSize(6)
-    .text('Principal Signature', x1, sigY + 2, { width: x2 - x1, align: 'right', lineBreak: false });
 }
 
-// ── TEMPLATE 1: Student Vertical — PURPLE ─────────────────────────────────────
-function tStudentVBlue(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#6b21a8');
-  doc.rect(x, y, w, h).fill('#ffffff');
-  wm(doc, x, y, w, h, d.logo);
-
-  const hH = h * 0.17;
-  doc.rect(x, y, w, hH).fill(p);
-  const logoSz = hH * 0.68;
-  drawLogo(doc, x + 10, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
-  const snX = x + 10 + logoSz + 8;
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.28, 11))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.17, { lineBreak: false, width: w * 0.6 });
-  doc.fillColor('rgba(255,255,255,0.82)').font('Helvetica').fontSize(Math.min(hH * 0.18, 7.5))
-    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.57, { lineBreak: false, width: w * 0.6 });
-
-  const bH = h * 0.048, bY = y + hH + h * 0.022;
-  const bW = w * 0.78, bX = x + (w - bW) / 2;
-  doc.rect(bX, bY, bW, bH).fill(p);
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(bH * 0.52)
-    .text('STUDENT ID CARD', x, bY + bH * 0.22, { width: w, align: 'center', lineBreak: false });
-
-  const ps = w * 0.42, px = x + (w - ps) / 2, pY = bY + bH + h * 0.028;
-  doc.save(); doc.rect(px - 1.5, pY - 1.5, ps + 3, ps + 3).lineWidth(1.5).strokeColor(p).stroke(); doc.restore();
-  drawPhoto(doc, d.profileImage, px, pY, ps, ps);
-
-  const nY = pY + ps + h * 0.022;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(h * 0.048)
-    .text((d.name || 'Name').toUpperCase(), x + 5, nY, { width: w - 10, align: 'center', lineBreak: false });
-
-  const lx = x + w * 0.1, vx = x + w * 0.5, fs = h * 0.027, gap = h * 0.043;
-  let fy = nY + h * 0.062;
-  fRow(doc, 'Class', d.class || 'N/A', lx, vx, fy, fs); fy += gap;
-  fRow(doc, 'Section', d.section || 'N/A', lx, vx, fy, fs); fy += gap;
-  fRow(doc, 'Roll No.', d.roll || 'N/A', lx, vx, fy, fs); fy += gap;
-  fRow(doc, 'Student ID', d.studentId || 'N/A', lx, vx, fy, fs);
-
-  sigRightV(doc, x, y, w, h, p);
-  footer(doc, x, y, w, h, p);
+// Helper: draw a hexagon
+// Helper: fit text in width, reducing font size if needed
+function fitText(doc, text, maxW, font, maxFs, minFs = 6) {
+  let fs = maxFs;
+  doc.font(font).fontSize(fs);
+  while (fs > minFs && doc.widthOfString(String(text || '')) > maxW) {
+    fs -= 0.5;
+    doc.fontSize(fs);
+  }
+  return fs;
 }
 
-// ── TEMPLATE 2: Student Horizontal Wave — GREEN ───────────────────────────────
-function tStudentHWave(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#1a6b3c');
-  const dk = darken(p, 0.25);
-  doc.rect(x, y, w, h).fill('#ffffff');
-  wm(doc, x, y, w, h, d.logo);
+function drawHexagon(doc, cx, cy, r, color, fill = true) {
 
-  const hH = h * 0.22;
-  doc.rect(x, y, w, hH).fill(p);
-  const logoSz = hH * 0.65;
-  drawLogo(doc, x + 12, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
-  const snX = x + 12 + logoSz + 10;
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.3, 11))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.15, { lineBreak: false, width: w * 0.42 });
-  doc.fillColor('rgba(255,255,255,0.8)').font('Helvetica').fontSize(Math.min(hH * 0.18, 7.5))
-    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.54, { lineBreak: false, width: w * 0.42 });
-
-  const bw = w * 0.22;
-  doc.rect(x + w - bw, y, bw, hH).fill(dk);
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.22, 9))
-    .text('STUDENT\nID CARD', x + w - bw, y + hH * 0.2, { width: bw, align: 'center' });
-
-  const panelW = w * 0.35;
-  doc.rect(x, y + hH, panelW, h - hH).fill(p);
-  const ps = panelW * 0.72, px2 = x + (panelW - ps) / 2, pY = y + hH + (h - hH) * 0.09;
-  doc.save(); doc.rect(px2 - 2, pY - 2, ps + 4, ps + 4).fill('#fff'); doc.restore();
-  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
-  doc.fillColor('#fff').font('Helvetica').fontSize(Math.min(h * 0.04, 7))
-    .text('ID: ' + (d.studentId || 'N/A'), x, pY + ps + h * 0.03, { width: panelW, align: 'center', lineBreak: false });
-
-  const rx = x + panelW + 18, rw = w - panelW - 25;
-  const nY = y + hH + (h - hH) * 0.09;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(h * 0.1, 18))
-    .text((d.name || 'Name').toUpperCase(), rx, nY, { width: rw, lineBreak: false });
-
-  const fs = Math.min(h * 0.055, 9), gap = h * 0.1;
-  let fy = nY + h * 0.17;
-  const lvx = rx + rw * 0.42;
-  fRow(doc, 'Class', d.class || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Section', d.section || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Roll No.', d.roll || 'N/A', rx, lvx, fy, fs);
-
-  sigRightH(doc, rx, rw, y + h * 0.84, p);
-  footer(doc, x, y, w, h, p);
-}
-
-// ── TEMPLATE 3: Teacher Horizontal — GREEN ────────────────────────────────────
-function tTeacherHGreen(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#1a6b3c');
-  const lt = lighten(p, 0.88);
-  doc.rect(x, y, w, h).fill('#ffffff');
-  wm(doc, x, y, w, h, d.logo);
-
-  const hH = h * 0.22;
-  doc.rect(x, y, w, hH).fill('#ffffff');
-  const logoSz = hH * 0.72;
-  // On white header — needs colored bg so icon visible
-  drawLogo(doc, x + 12, y + (hH - logoSz) / 2, logoSz, d.logo, true, p);
-
-  const snX = x + 12 + logoSz + 10;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(hH * 0.3, 11))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.15, { lineBreak: false, width: w * 0.42 });
-  doc.fillColor('#666').font('Helvetica').fontSize(Math.min(hH * 0.18, 7.5))
-    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.55, { lineBreak: false, width: w * 0.42 });
-
-  const bw = w * 0.22;
-  doc.rect(x + w - bw, y, bw, hH).fill(p);
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.22, 9))
-    .text('TEACHER\nID CARD', x + w - bw, y + hH * 0.2, { width: bw, align: 'center' });
-
+  const angle = Math.PI / 3;
   doc.save();
-  doc.strokeColor(p).lineWidth(1.5).moveTo(x, y + hH).lineTo(x + w, y + hH).stroke();
+  doc.translate(cx, cy);
+  doc.rotate(Math.PI / 2); // Pointy top
+  doc.moveTo(r, 0);
+  for (let i = 1; i < 6; i++) {
+    doc.lineTo(r * Math.cos(angle * i), r * Math.sin(angle * i));
+  }
+  doc.closePath();
+  if (fill) doc.fill(color);
+  else doc.lineWidth(2.5).strokeColor(color).stroke();
   doc.restore();
-
-  const panelW = w * 0.35;
-  doc.rect(x, y + hH, panelW, h - hH).fill(lt);
-  const ps = panelW * 0.72, px2 = x + (panelW - ps) / 2, pY = y + hH + (h - hH) * 0.09;
-  doc.save(); doc.rect(px2 - 1.5, pY - 1.5, ps + 3, ps + 3).lineWidth(1.5).strokeColor(p).stroke(); doc.restore();
-  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(h * 0.04, 7))
-    .text('ID: ' + (d.staffId || 'N/A'), x, pY + ps + h * 0.03, { width: panelW, align: 'center', lineBreak: false });
-
-  const rx = x + panelW + 18, rw = w - panelW - 25;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(h * 0.1, 16))
-    .text((d.name || 'Name').toUpperCase(), rx, pY, { width: rw, lineBreak: false });
-
-  const fs = Math.min(h * 0.055, 9), gap = h * 0.1;
-  let fy = pY + h * 0.17;
-  const lvx = rx + rw * 0.48;
-  fRow(doc, 'Designation', d.designation || 'Teacher', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Subject', d.subject || 'General', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Join Date', formatDate(d.joinDate), rx, lvx, fy, fs);
-
-  sigRightH(doc, rx, rw, y + h * 0.84, p);
-  footer(doc, x, y, w, h, p);
 }
 
-// ── TEMPLATE 4: Staff Vertical Orange ────────────────────────────────────────
-function tStaffVOrange(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#c05621');
-  const lt = lighten(p, 0.88);
-  doc.rect(x, y, w, h).fill('#ffffff');
-  wm(doc, x, y, w, h, d.logo);
-
-  const stripW = w * 0.055;
-  doc.rect(x, y, stripW, h).fill(p);
-
-  const hH = h * 0.19;
-  doc.rect(x + stripW, y, w - stripW, hH).fill(p);
-  const logoSz = hH * 0.68;
-  drawLogo(doc, x + stripW + 10, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
-  const snX = x + stripW + logoSz + 18;
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.26, 10))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.17, { lineBreak: false, width: w * 0.56 });
-  doc.fillColor('rgba(255,255,255,0.8)').font('Helvetica').fontSize(Math.min(hH * 0.17, 7))
-    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.57, { lineBreak: false, width: w * 0.56 });
-
-  const titleY = y + hH + h * 0.025;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(h * 0.05)
-    .text('STAFF ID CARD', x + stripW, titleY, { width: w - stripW, align: 'center', lineBreak: false });
-  const lineW = (w - stripW) * 0.75;
-  doc.rect(x + stripW + (w - stripW - lineW) / 2, titleY + h * 0.055, lineW, 1.5).fill(p);
-
-  const ps = w * 0.44, px2 = x + stripW + ((w - stripW) - ps) / 2, pY = titleY + h * 0.075;
-  doc.save(); doc.rect(px2 - 2.5, pY - 2.5, ps + 5, ps + 5).lineWidth(2.5).strokeColor(p).stroke(); doc.restore();
-  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
-
-  const nY = pY + ps + h * 0.022;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(h * 0.05)
-    .text((d.name || 'Name').toUpperCase(), x + stripW + 5, nY, { width: w - stripW - 10, align: 'center', lineBreak: false });
-
-  const fieldsY = nY + h * 0.055;
-  doc.rect(x + stripW + w * 0.05, fieldsY - h * 0.008, w * 0.85, h * 0.225).fill(lt);
-  const lx = x + stripW + w * 0.1, vx = x + stripW + w * 0.5;
-  const fs = h * 0.028, gap = h * 0.045;
-  let fy = fieldsY + h * 0.01;
-  fRow(doc, 'Designation', d.designation || 'Staff', lx, vx, fy, fs); fy += gap;
-  fRow(doc, 'Department', d.department || 'N/A', lx, vx, fy, fs); fy += gap;
-  fRow(doc, 'Employee ID', d.staffId || 'N/A', lx, vx, fy, fs); fy += gap;
-  fRow(doc, 'Join Date', formatDate(d.joinDate), lx, vx, fy, fs);
-
-  const bcY = y + h * 0.868, bcH = h * 0.027;
-  const bars = [2, 1, 3, 1, 2, 1, 4, 1, 2, 3, 1, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1];
-  let bxB = x + stripW + w * 0.1;
-  bars.forEach((bw2, i) => { if (i % 2 === 0) doc.rect(bxB, bcY, bw2, bcH).fill('#333'); bxB += bw2 + 1; });
-
-  footer(doc, x, y, w, h, p);
-}
-
-// ── TEMPLATE 5: Security Horizontal Red ──────────────────────────────────────
-function tSecurityHRed(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#c53030');
-  const dk = darken(p, 0.22);
-  doc.rect(x, y, w, h).fill('#ffffff');
-  wm(doc, x, y, w, h, d.logo);
-
-  const hH = h * 0.24;
-  doc.rect(x, y, w, hH).fill(p);
-  const logoSz = hH * 0.65;
-  drawLogo(doc, x + 12, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
-  const snX = x + 12 + logoSz + 10;
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.28, 10))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.15, { lineBreak: false, width: w * 0.38 });
-  doc.fillColor('rgba(255,255,255,0.8)').font('Helvetica').fontSize(Math.min(hH * 0.18, 7))
-    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.54, { lineBreak: false, width: w * 0.38 });
-
-  const bw = w * 0.26, bx2 = x + w - bw;
-  doc.rect(bx2, y, bw, hH).fill(dk);
+function drawHexagonPhoto(doc, img, cx, cy, r) {
+  const angle = Math.PI / 3;
   doc.save();
-  const shX = bx2 + bw * 0.5, shY = y + hH * 0.18, shS = hH * 0.22;
-  doc.fillColor('rgba(255,255,255,0.22)');
-  doc.moveTo(shX, shY).lineTo(shX + shS, shY + shS * 0.32).lineTo(shX + shS, shY + shS * 0.9)
-    .lineTo(shX, shY + shS * 1.2).lineTo(shX - shS, shY + shS * 0.9).lineTo(shX - shS, shY + shS * 0.32).closePath().fill();
-  doc.restore();
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.22, 8))
-    .text('SECURITY\nID CARD', bx2, y + hH * 0.18, { width: bw, align: 'center' });
-
-  const ps = h * 0.48, px2 = x + 18, pY = y + hH + (h - hH) * 0.1;
-  doc.save(); doc.rect(px2 - 1.5, pY - 1.5, ps + 3, ps + 3).lineWidth(1.5).strokeColor(p).stroke(); doc.restore();
-  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
-
-  const rx = px2 + ps + 20, rw = w - rx + x - 12;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(h * 0.1, 15))
-    .text((d.name || 'Name').toUpperCase(), rx, pY, { width: rw, lineBreak: false });
-
-  const fs = Math.min(h * 0.05, 8.5), gap = h * 0.095;
-  let fy = pY + h * 0.16;
-  const lvx = rx + rw * 0.48;
-  fRow(doc, 'Position', d.designation || 'Security Guard', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'ID Number', d.staffId || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Contact', d.contact || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Blood Group', d.bloodGroup || 'N/A', rx, lvx, fy, fs);
-
-  const bannerH = h * 0.1, bannerY = y + h * 0.82;
-  doc.rect(x, bannerY, w, bannerH).fill(p);
-  doc.save();
-  doc.rect(x, bannerY, w, bannerH).clip();
-  for (let i = -10; i < w + 20; i += 14) {
-    doc.save(); doc.strokeColor(dk).lineWidth(6).opacity(0.3);
-    doc.moveTo(x + i, bannerY).lineTo(x + i + 15, bannerY + bannerH).stroke();
-    doc.restore();
+  doc.translate(cx, cy);
+  doc.rotate(Math.PI / 2);
+  doc.moveTo(r, 0);
+  for (let i = 1; i < 6; i++) {
+    doc.lineTo(r * Math.cos(angle * i), r * Math.sin(angle * i));
+  }
+  doc.closePath().clip();
+  doc.rotate(-Math.PI / 2); // Rotate back for image
+  if (img) {
+    doc.image(img, -r, -r, { width: r * 2, height: r * 2, fit: [r * 2, r * 2], align: 'center', valign: 'center' });
+  } else {
+    doc.rect(-r, -r, r * 2, r * 2).fill('#d5d5d5');
   }
   doc.restore();
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(bannerH * 0.45, 10))
-    .text('AUTHORIZED STAFF', x, bannerY + bannerH * 0.27, { width: w, align: 'center', lineBreak: false });
-
-  footer(doc, x, y, w, h, p);
 }
 
-// ── TEMPLATE 6: Support Staff Horizontal — NO SIGNATURE ──────────────────────
-function tSupportStaffHPurple(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#553c9a');
-  const dk = darken(p, 0.22);
-  doc.rect(x, y, w, h).fill('#f8f8f8');
-  wm(doc, x, y, w, h, d.logo);
 
-  const hH = h * 0.24;
-  doc.rect(x, y, w, hH).fill(p);
-  doc.save();
-  doc.fillColor(dk);
-  doc.moveTo(x + w * 0.56, y).lineTo(x + w, y).lineTo(x + w, y + hH).lineTo(x + w * 0.7, y + hH).closePath().fill();
-  doc.restore();
+// Helper: draw a label:value row with auto font scaling
+function drawFieldRow(doc, label, value, lx, vx, y, maxFs, lColor, vColor, availW) {
+  const valStr = String(value || 'N/A');
+  const labelStr = String(label || '');
 
-  const logoSz = hH * 0.62;
-  drawLogo(doc, x + 14, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
-  const snX = x + 14 + logoSz + 10;
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.27, 10))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.15, { lineBreak: false, width: w * 0.36 });
-  doc.fillColor('rgba(255,255,255,0.82)').font('Helvetica').fontSize(Math.min(hH * 0.17, 7))
-    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.53, { lineBreak: false, width: w * 0.36 });
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.19, 8))
-    .text('SUPPORT STAFF\nID CARD', x + w * 0.73, y + hH * 0.22, { width: w * 0.24, align: 'center' });
-  doc.rect(x, y + hH - h * 0.03, w, h * 0.03).fill(dk);
+  const lFs = fitText(doc, labelStr, vx - lx - 6, 'Helvetica', maxFs);
+  doc.font('Helvetica').fontSize(lFs).fillColor(lColor || '#555555')
+    .text(labelStr, lx, y, { lineBreak: false });
+  doc.font('Helvetica').fontSize(lFs).fillColor(lColor || '#555555')
+    .text(' :', lx + doc.widthOfString(labelStr), y, { lineBreak: false });
 
-  const ps = h * 0.46, px2 = x + 16, pY = y + hH + (h - hH) * 0.1;
-  doc.save(); doc.rect(px2 - 2, pY - 2, ps + 4, ps + 4).lineWidth(2).strokeColor(p).stroke(); doc.restore();
-  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
-
-  const rx = px2 + ps + 16, rw = w - rx + x - 10;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(h * 0.095, 14))
-    .text((d.name || 'Name').toUpperCase(), rx, pY, { width: rw, lineBreak: false });
-  doc.save(); doc.rect(rx, pY + h * 0.115, rw * 0.85, 2).fill(p); doc.restore();
-
-  const fs = Math.min(h * 0.05, 8.5), gap = h * 0.093;
-  let fy = pY + h * 0.15;
-  const lvx = rx + rw * 0.44;
-  fRow(doc, 'Role', d.designation || 'Support Staff', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Staff ID', d.staffId || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Contact', d.contact || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Join Date', formatDate(d.joinDate), rx, lvx, fy, fs);
-
-  // NO SIGNATURE
-  const fh = h * 0.1, fy2 = y + h - fh;
-  doc.rect(x, fy2, w, fh).fill(p);
-  doc.fillColor('rgba(255,255,255,0.65)').font('Helvetica').fontSize(Math.min(fh * 0.28, 7))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), x + 8, fy2 + fh * 0.32, { lineBreak: false });
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(fh * 0.28, 7))
-    .text('www.apnaschooledu.com', x, fy2 + fh * 0.32, { width: w - 10, align: 'right', lineBreak: false });
+  const vFs = fitText(doc, valStr, availW || (200), 'Helvetica-Bold', maxFs);
+  doc.font('Helvetica-Bold').fontSize(vFs).fillColor(vColor || '#111111')
+    .text(valStr, vx, y, { lineBreak: false });
 }
 
-// ── TEMPLATE 7: Position Holder Black & Gold ──────────────────────────────────
-function tPositionHolderV(doc, x, y, w, h, d) {
-  const gold = resolveColor(d.primaryColor, '#d4a017');
-  const darkGold = darken(gold, 0.25);
-  doc.rect(x, y, w, h).fill('#111111');
-  wm(doc, x, y, w, h, d.logo);
+// ── TEMPLATE 1: Student Teal Horizontal (Image 1) ─────────────────────────────
+// White bg, teal decorative shapes top-right & bottom-left, circular photo left,
+// info right, "STUDENT ID CARD" pill badge, principal signature bottom-right
+function tStudentTeal(doc, x, y, w, h, d) {
+  const teal = resolveColor(d.primaryColor, '#1a9e8f');
+  const tealDark = darken(teal, 0.25);
+  const tealLight = lighten(teal, 0.6);
 
-  const hH = h * 0.14;
-  const logoSz = hH * 0.72;
-  drawLogo(doc, x + 10, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.28, 9))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), x + logoSz + 22, y + hH * 0.18, { lineBreak: false, width: w - logoSz - 32 });
-  doc.fillColor('rgba(255,255,255,0.6)').font('Helvetica').fontSize(Math.min(hH * 0.18, 6.5))
-    .text(d.schoolAddress || 'School Address', x + logoSz + 22, y + hH * 0.57, { lineBreak: false, width: w - logoSz - 32 });
-
-  const bannerH = h * 0.055, bannerY = y + hH;
-  doc.rect(x, bannerY, w, bannerH).fill(gold);
-  doc.fillColor('#111').font('Helvetica-Bold').fontSize(bannerH * 0.48)
-    .text('POSITION HOLDER', x, bannerY + bannerH * 0.22, { width: w, align: 'center', lineBreak: false });
-
-  const ps = w * 0.42, pY = bannerY + bannerH + h * 0.04;
-  const cxP = x + w / 2, cyP = pY + ps / 2;
-  doc.save();
-  doc.circle(cxP, cyP, ps / 2 + 8).lineWidth(4).strokeColor(gold).stroke();
-  doc.circle(cxP, cyP, ps / 2 + 3).lineWidth(1).strokeColor(darkGold).stroke();
-  doc.circle(cxP, cyP, ps / 2).clip();
-  drawPhoto(doc, d.profileImage, cxP - ps / 2, cyP - ps / 2, ps, ps);
-  doc.restore();
-
-  const rH = h * 0.045, rY = pY + ps + h * 0.015;
-  const rW = w * 0.7, rX = x + (w - rW) / 2;
-  doc.rect(rX, rY, rW, rH).fill(gold);
-  doc.save();
-  const tail = rH * 0.4;
-  doc.moveTo(rX, rY).lineTo(rX - tail, rY + rH / 2).lineTo(rX, rY + rH).closePath().fill(gold);
-  doc.moveTo(rX + rW, rY).lineTo(rX + rW + tail, rY + rH / 2).lineTo(rX + rW, rY + rH).closePath().fill(gold);
-  doc.restore();
-  doc.fillColor('#111').font('Helvetica-Bold').fontSize(rH * 0.5)
-    .text((d.position || 'HEAD BOY').toUpperCase(), rX, rY + rH * 0.22, { width: rW, align: 'center', lineBreak: false });
-
-  const nY = rY + rH + h * 0.022;
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(h * 0.048)
-    .text((d.name || 'Name').toUpperCase(), x + 5, nY, { width: w - 10, align: 'center', lineBreak: false });
-
-  const lx = x + w * 0.12, vx = x + w * 0.5, fs = h * 0.026, gap = h * 0.042;
-  let fy = nY + h * 0.065;
-  fRow(doc, 'Class', d.class || 'N/A', lx, vx, fy, fs, '#aaa', '#fff'); fy += gap;
-  fRow(doc, 'Section', d.section || 'N/A', lx, vx, fy, fs, '#aaa', '#fff'); fy += gap;
-  fRow(doc, 'Roll No.', d.roll || 'N/A', lx, vx, fy, fs, '#aaa', '#fff'); fy += gap;
-  fRow(doc, 'Student ID', d.studentId || 'N/A', lx, vx, fy, fs, '#aaa', '#fff');
-
-  sigRightV(doc, x, y, w, h, gold);
-
-  const fh = h * 0.08, fy3 = y + h - fh;
-  doc.rect(x, fy3, w, fh).fill(gold);
-  doc.fillColor('#111').font('Helvetica-Bold').fontSize(Math.max(fh * 0.3, 7))
-    .text('www.apnaschooledu.com', x, fy3 + fh * 0.28, { width: w, align: 'center', lineBreak: false });
-}
-
-// ── TEMPLATE 8: Class Monitor — HORIZONTAL (CHANGED from vertical) ────────────
-function tClassMonitorH(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#0f766e');
-  const dk = darken(p, 0.25);
+  // White background
   doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Top-right teal decorative area ──
+  // Large rounded shape top right
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+
+  // Top-right big arc/block
+  doc.moveTo(x + w * 0.52, y)
+    .lineTo(x + w, y)
+    .lineTo(x + w, y + h * 0.48)
+    .quadraticCurveTo(x + w * 0.88, y + h * 0.35, x + w * 0.72, y + h * 0.12)
+    .quadraticCurveTo(x + w * 0.62, y + h * 0.03, x + w * 0.52, y)
+    .fill(teal);
+
+
+  // Smaller accent stripe top-right
+  doc.moveTo(x + w * 0.68, y)
+    .lineTo(x + w, y)
+    .lineTo(x + w, y + h * 0.22)
+    .quadraticCurveTo(x + w * 0.9, y + h * 0.1, x + w * 0.68, y)
+    .fill(tealDark);
+
+
+  // Bottom-left teal shape
+  doc.moveTo(x, y + h * 0.72)
+    .lineTo(x + w * 0.3, y + h)
+    .lineTo(x, y + h)
+    .closePath()
+    .fill(teal);
+
+  // Bottom-left extra accent
+  doc.moveTo(x, y + h * 0.85)
+    .lineTo(x + w * 0.18, y + h)
+    .lineTo(x, y + h)
+    .closePath()
+    .fill(tealDark);
+
+  doc.restore();
+
+  // Watermark logo center
   wm(doc, x, y, w, h, d.logo);
 
-  // Header — same style as student horizontal
-  const hH = h * 0.22;
-  doc.rect(x, y, w, hH).fill(p);
-  const logoSz = hH * 0.65;
-  drawLogo(doc, x + 12, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
-  const snX = x + 12 + logoSz + 10;
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.3, 11))
-    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.15, { lineBreak: false, width: w * 0.42 });
-  doc.fillColor('rgba(255,255,255,0.8)').font('Helvetica').fontSize(Math.min(hH * 0.18, 7.5))
-    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.54, { lineBreak: false, width: w * 0.42 });
+  // ── Academic Year (top right, on teal) ──
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#000000')
+    .text('ACADEMIC YEAR', x + w * 0.63, y + h * 0.04, { width: w * 0.34, align: 'center', lineBreak: false });
+  const sessionFs = fitText(doc, d.session || '2025-2026', w * 0.34, 'Helvetica-Bold', 7, 6);
+  doc.font('Helvetica-Bold').fontSize(sessionFs).fillColor('#000000')
+    .text(d.session || '2025-2026', x + w * 0.63, y + h * 0.04 + 10, { width: w * 0.34, align: 'center', lineBreak: false });
 
-  // CLASS MONITOR badge top right
-  const bw = w * 0.24;
-  doc.rect(x + w - bw, y, bw, hH).fill(dk);
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.22, 9))
-    .text('CLASS\nMONITOR', x + w - bw, y + hH * 0.2, { width: bw, align: 'center' });
 
-  // Left colored panel
-  const panelW = w * 0.35;
-  doc.rect(x, y + hH, panelW, h - hH).fill(p);
-  const ps = panelW * 0.72, px2 = x + (panelW - ps) / 2, pY = y + hH + (h - hH) * 0.09;
-  doc.save(); doc.rect(px2 - 2, pY - 2, ps + 4, ps + 4).fill('#fff'); doc.restore();
-  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
-  doc.fillColor('#fff').font('Helvetica').fontSize(Math.min(h * 0.04, 7))
-    .text('ID: ' + (d.studentId || 'N/A'), x, pY + ps + h * 0.03, { width: panelW, align: 'center', lineBreak: false });
 
-  // Right content
-  const rx = x + panelW + 18, rw = w - panelW - 25;
-  const nY = y + hH + (h - hH) * 0.09;
-  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(h * 0.1, 18))
-    .text((d.name || 'Name').toUpperCase(), rx, nY, { width: rw, lineBreak: false });
 
-  // Accent line under name
-  doc.save(); doc.rect(rx, nY + h * 0.115, rw * 0.7, 1.5).fill(p); doc.restore();
 
-  const fs = Math.min(h * 0.055, 9), gap = h * 0.095;
-  let fy = nY + h * 0.16;
-  const lvx = rx + rw * 0.42;
-  fRow(doc, 'Class', d.class || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Section', d.section || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Roll No.', d.roll || 'N/A', rx, lvx, fy, fs); fy += gap;
-  fRow(doc, 'Student ID', d.studentId || 'N/A', rx, lvx, fy, fs);
+  // ── School Logo and Name top-left ──
+  const logoSize = h * 0.22;
+  const logoX = x + w * 0.025, logoY = y + h * 0.02;
+  if (d.logo) {
+    drawLogo(doc, logoX, logoY, logoSize, d.logo);
+  } else {
+    doc.rect(logoX, logoY, logoSize, logoSize).fill('#e0e0e0');
+  }
+  const sName = titleCase(d.schoolName || 'School Name');
+  const snW = w * 0.45;
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 7.5, 5.5);
+  const snY = logoY + (logoSize - (snFs + 8)) / 2;
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#111111')
+    .text(sName, logoX + logoSize + 4, snY, { width: snW, align: 'left', lineBreak: false });
+  doc.font('Helvetica').fontSize(5.5).fillColor('#666666')
+    .text(d.schoolAddress || 'School Address, City', logoX + logoSize + 4, snY + snFs + 1, { width: snW, align: 'left', lineBreak: false });
 
-  sigRightH(doc, rx, rw, y + h * 0.84, p);
-  footer(doc, x, y, w, h, p);
+
+  // ── Circular photo left-center ──
+  const photoR = h * 0.27;
+  const photoCX = x + w * 0.22, photoCY = y + h * 0.5;
+  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, teal, 2.5);
+
+  // ── STUDENT ID CARD pill badge ──
+  const badgeW = w * 0.42, badgeH = h * 0.1;
+  const badgeX = x + w * 0.45, badgeY = y + h * 0.22;
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(teal);
+  doc.font('Helvetica-Bold').fillColor('#ffffff');
+  const badgeFs = fitText(doc, 'STUDENT ID CARD', badgeW - 10, 'Helvetica-Bold', 8);
+  doc.fontSize(badgeFs).text('STUDENT ID CARD', badgeX, badgeY + badgeH * 0.25, { width: badgeW, align: 'center', lineBreak: false });
+
+
+  // ── Student Name ──
+  const nameX = x + w * 0.45, nameY = badgeY + badgeH + h * 0.04;
+  const nameW = w * 0.51;
+  const nameFs = fitText(doc, (d.name || '').toUpperCase(), nameW, 'Helvetica-Bold', 11, 7);
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(teal)
+    .text((d.name || 'STUDENT NAME').toUpperCase(), nameX, nameY, { width: nameW, align: 'left', lineBreak: false });
+
+  // ── Fields: Name, Roll No, ID, Class ──
+  const fieldsX = x + w * 0.45;
+  const valX = x + w * 0.62;
+  const fieldW = w * 0.51;
+  const valW = x + w * 0.97 - valX;
+  const fieldFs = 7;
+  const lineH = h * 0.1;
+  let fy = nameY + nameFs + 6;
+
+  const fields = [
+    ['Student Id', d.studentId || d.roll || 'N/A'],
+    ['Roll No', d.roll || 'N/A'],
+    ['Class', d.class || 'N/A'],
+  ];
+  fields.forEach(([lbl, val]) => {
+    drawFieldRow(doc, lbl, val, fieldsX, valX, fy, fieldFs, '#444444', '#111111', valW);
+    fy += lineH;
+  });
+
+  // ── QR Code bottom-center ──
+  const qrSize2 = h * 0.18;
+  const qrX = x + w * 0.38, qrY = y + h * 0.78;
+  drawQR(doc, qrX, qrY, qrSize2, teal);
+
+
+
+  // ── Card Expires bottom-left (on teal) ──
+  doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#000000')
+    .text('Card Expires', x + 4, y + h * 0.83, { lineBreak: false });
+  const expYear = new Date().getFullYear() + 3;
+  doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#000000')
+    .text(`DEC ${expYear}`, x + 4, y + h * 0.83 + 9, { lineBreak: false });
+
+
+  // ── Principal Signature bottom-right ──
+  const sigW = w * 0.28;
+  const sigX = x + w * 0.68, sigY = y + h * 0.84; // Lowered
+  drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
+
+}
+
+// ── TEMPLATE 2: Student Navy-Gold Horizontal (Image 2) ───────────────────────
+// Dark navy bg, gold right accent stripe, circular photo left, logo+fields right,
+// name at bottom-left, "Authorized by Registrar" badge bottom-right
+function tStudentNavy(doc, x, y, w, h, d) {
+  const navy = resolveColor(d.primaryColor, '#1a2e4a'); 
+  const teal = navy;
+  const navyDark = darken(navy, 0.25);
+  const navyLight = lighten(navy, 0.6);
+
+  const gold = '#c9a227';
+  const goldLight = '#e8c84a';
+
+  // Navy background
+  doc.rect(x, y, w, h).fill(navy);
+
+  // ── Right gold accent stripes ──
+  const stripeW = w * 0.06;
+  doc.rect(x + w - stripeW * 2.4, y, stripeW, h).fill(gold);
+  doc.rect(x + w - stripeW * 1.1, y, stripeW * 1.1, h).fill(goldLight);
+
+  // Watermark
+  wm(doc, x, y, w, h, d.logo);
+
+
+  // ── Date of Issue top-right (on navy, before gold stripe) ──
+  doc.font('Helvetica-Bold').fontSize(7).fillColor('#cccccc')
+    .text('Date Of Issue', x + w * 0.55, y + h * 0.06, { width: w * 0.36, align: 'right', lineBreak: false });
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const now = new Date();
+  const dStr = `${String(now.getDate()).padStart(2, '0')} ${months[now.getMonth()]} ${now.getFullYear()}`;
+  doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#aaaaaa')
+    .text(dStr, x + w * 0.55, y + h * 0.06 + 9, { width: w * 0.36, align: 'right', lineBreak: false });
+
+
+
+  // ── School Logo and Name top-left ──
+  const logoSize2 = h * 0.16;
+  const logoX2 = x + w * 0.025, logoY2 = y + h * 0.04;
+  if (d.logo) {
+    drawLogo(doc, logoX2, logoY2, logoSize2, d.logo);
+  }
+  const sName2 = titleCase(d.schoolName || 'School Name');
+  const snW2 = w * 0.4;
+  const snFs2 = fitText(doc, sName2, snW2, 'Helvetica-Bold', 7.5, 5.5);
+  doc.font('Helvetica-Bold').fontSize(snFs2).fillColor('#ffffff')
+    .text(sName2, logoX2 + logoSize2 + 4, logoY2, { width: snW2, align: 'left', lineBreak: false });
+  doc.font('Helvetica').fontSize(5).fillColor('#aaaaaa')
+    .text(d.schoolAddress || 'School Address, City', logoX2 + logoSize2 + 4, logoY2 + snFs2 + 1, { width: snW2, align: 'left', lineBreak: false });
+
+  // ── Circular photo left ──
+  const photoR = h * 0.22;
+  const photoCX = x + w * 0.2, photoCY = y + h * 0.48;
+  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, gold, 2.5);
+
+  // ── Student Name center-right (was logo) ──
+  const nameW2 = w * 0.4;
+  const nameFs2 = fitText(doc, (d.name || '').toUpperCase(), nameW2, 'Helvetica-Bold', 11, 7);
+  doc.font('Helvetica-Bold').fontSize(nameFs2).fillColor(gold)
+    .text((d.name || 'STUDENT NAME').toUpperCase(), x + w * 0.43, y + h * 0.1, { width: nameW2, align: 'left', lineBreak: false });
+
+  // ── Fields right of photo ──
+  const fieldsX = x + w * 0.43;
+  const colonX = x + w * 0.58;
+  const valX = x + w * 0.60;
+  const valW = x + w * 0.86 - valX;
+  const fieldFs = 7.5;
+  const lineH = h * 0.11;
+  let fy = y + h * 0.34;
+
+  const fields = [
+    ['ID', d.studentId || d.roll || 'N/A'],
+    ['Roll No', d.roll || 'N/A'],
+    ['Class', d.class || 'N/A'],
+    ['Session', d.session || 'N/A'],
+  ];
+
+  fields.forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#c0c8d8')
+      .text(lbl, fieldsX, fy, { lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(fieldFs).fillColor('#c0c8d8')
+      .text(':', colonX, fy, { lineBreak: false });
+    const vFs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
+    doc.font('Helvetica-Bold').fontSize(vFs).fillColor('#ffffff')
+      .text(String(val), valX, fy, { lineBreak: false });
+    fy += lineH;
+  });
+
+  // (Removed decorative circle and play icon)
+
+
+  // ── QR Code bottom-left (was name) ──
+  const qrSize3 = h * 0.18;
+  drawQR(doc, x + w * 0.025, y + h * 0.82, qrSize3, '#ffffff');
+
+  // ── Principal Signature bottom-right ──
+  const sigW = w * 0.25;
+  const sigX = x + w * 0.58, sigY = y + h * 0.85; // Lowered
+  drawSignature(doc, d.principalName, sigX, sigY, sigW, '#cccccc');
+
+
+  // (Removed registrar badge)
+
+}
+
+// ── TEMPLATE 3: Teacher Cream/Navy Horizontal (Image 3 Middle) ───────────────
+// Cream/beige background, dark navy header with school name, square photo left,
+// student info right, QR bottom-left, principal signature bottom-right
+function tTeacherCream(doc, x, y, w, h, d) {
+  console.log(`[DEBUG] drawTemplate: Mapping data for tTeacherCream:`, d);
+  const navy = resolveColor(d.primaryColor, '#1a2744');
+  const cream = '#f5f0e8';
+  const red = '#c0392b';
+
+  // Cream background
+  doc.rect(x, y, w, h).fill(cream);
+
+  // ── Navy header band ──
+  const headerH = h * 0.28;
+  doc.rect(x, y, w, headerH).fill(navy);
+
+  // School logo in header left
+  const logoSize = headerH * 0.72;
+  const logoX = x + w * 0.025, logoY = y + (headerH - logoSize) / 2;
+  if (d.logo) {
+    drawLogo(doc, logoX, logoY, logoSize, d.logo);
+  } else {
+    doc.circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2).fill('#2a3f6f');
+  }
+
+  // School name in header
+  const schoolNameW = w * 0.62;
+  const schoolNameX = logoX + logoSize + 6;
+  const snFs = fitText(doc, (d.schoolName || '').toUpperCase(), schoolNameW, 'Helvetica-Bold', 9.5, 6);
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#ffffff')
+    .text((d.schoolName || 'SCHOOL NAME').toUpperCase(), schoolNameX, y + headerH * 0.18, { width: schoolNameW, lineBreak: false });
+  const addrFs = fitText(doc, d.schoolAddress || '', schoolNameW, 'Helvetica', 6, 4);
+  doc.font('Helvetica').fontSize(addrFs).fillColor('#aabbcc')
+    .text(d.schoolAddress || '', schoolNameX, y + headerH * 0.18 + snFs + 3, { width: schoolNameW, lineBreak: false });
+
+  // ── Square photo below header left ──
+  const photoW = w * 0.18, photoH = h * 0.36; // Slightly shorter to avoid QR
+  const photoX = x + w * 0.06, photoY = y + headerH + h * 0.03;
+  doc.rect(photoX - 1.5, photoY - 1.5, photoW + 3, photoH + 3).fill(navy);
+  drawSquarePhoto(doc, d.profileImage, photoX, photoY, photoW, photoH, 0);
+
+
+
+
+  // ── Teacher name ──
+  const infoX = x + w * 0.31;
+  const infoW = w * 0.65;
+  const tnameY = y + headerH + h * 0.06;
+  const tnameFs = fitText(doc, d.name || 'TEACHER NAME', infoW, 'Helvetica-Bold', 10.5, 7);
+  doc.font('Helvetica-Bold').fontSize(tnameFs).fillColor(navy)
+    .text(d.name || 'TEACHER NAME', infoX, tnameY, { width: infoW, lineBreak: false });
+
+
+  // Divider
+  doc.moveTo(infoX, tnameY + tnameFs + 4).lineTo(x + w * 0.95, tnameY + tnameFs + 4)
+    .lineWidth(0.5).strokeColor('#cccccc').stroke();
+
+  // ── Fields ──
+  const labelX = infoX;
+  const valX2 = infoX + w * 0.22;
+  const valW2 = x + w * 0.93 - valX2;
+  const fieldFs = 7;
+  const lineH = h * 0.1;
+  let fy2 = tnameY + tnameFs + 8;
+
+  const fields = [
+    ['Designation', d.designation || 'Teacher'],
+    ['Employee Id', d.staffId || 'N/A'],
+    ['Class', d.class || 'N/A'],
+    ['Joining Date', formatDate(d.joinDate)],
+  ];
+
+  fields.forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#333333')
+      .text(lbl, labelX, fy2, { lineBreak: false });
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#333333')
+      .text(':', labelX + doc.widthOfString(lbl) + 2, fy2, { lineBreak: false });
+    const vfs = fitText(doc, String(val), valW2, 'Helvetica-Bold', fieldFs);
+    doc.font('Helvetica-Bold').fontSize(vfs).fillColor('#cc0000')
+      .text(String(val), valX2, fy2, { lineBreak: false });
+    fy2 += lineH;
+  });
+
+
+  // ── QR bottom-left ──
+  const qrSize = h * 0.22;
+  const qrX = x + w * 0.04, qrY = y + h - qrSize - h * 0.05;
+  drawQR(doc, qrX, qrY, qrSize, navy);
+
+  // ── Principal Signature bottom-right ──
+  const sigW = w * 0.28;
+  const sigX = x + w * 0.65, sigY = y + h * 0.88; // Lowered
+  drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
+
+}
+
+// ── TEMPLATE 4: Security Red Vertical (Image 3 First — Red header vertical) ──
+// Portrait orientation, bold red header, white body, small square photo,
+// fields in clean rows, QR bottom, signature
+function tSecurityRed(doc, x, y, w, h, d) {
+  const red = resolveColor(d.primaryColor, '#c0392b');
+  const redDark = darken(red, 0.2);
+
+  // White background
+  doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Red header ──
+  const headerH = h * 0.22;
+  doc.rect(x, y, w, headerH).fill(red);
+
+  // School Name and Address in red header (LEFT)
+  const logoSize = headerH * 0.65; // Slightly smaller to avoid any overlap
+  const snX = x + w * 0.04, snY = y + headerH * 0.22;
+  const snW = w * 0.62; // Consistently limited width
+  const sName = titleCase(d.schoolName || 'School Name');
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 10, 7);
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#ffffff')
+    .text(sName, snX, snY, { width: snW, align: 'left', lineBreak: false });
+
+  const addrFs = 5.2;
+  doc.font('Helvetica').fontSize(addrFs).fillColor('#eeeeee')
+    .text(d.schoolAddress || '', snX, snY + snFs + 2, { width: snW, align: 'left', lineBreak: false });
+
+  // School logo in red header (RIGHT)
+  const logoX = x + w - logoSize - w * 0.04, logoY = y + (headerH - logoSize) / 2;
+  if (d.logo) {
+    drawLogo(doc, logoX, logoY, logoSize, d.logo);
+  }
+
+
+
+  // ── "SECURITY GUARD" role label ──
+  const roleY = y + headerH + h * 0.02;
+  const roleFs = fitText(doc, 'SECURITY GUARD', w - 8, 'Helvetica-Bold', 7.5, 5);
+  doc.font('Helvetica-Bold').fontSize(roleFs).fillColor(red)
+    .text('SECURITY GUARD', x + 4, roleY, { width: w - 8, align: 'center', lineBreak: false });
+
+  // ── Square photo centered ──
+  const photoW = w * 0.35, photoH = w * 0.35;
+  const photoX = x + (w - photoW) / 2;
+  const photoY = roleY + roleFs + 4;
+  doc.rect(photoX - 1.5, photoY - 1.5, photoW + 3, photoH + 3).fill(red);
+  drawSquarePhoto(doc, d.profileImage, photoX, photoY, photoW, photoH, 0);
+
+
+  // ── Name ──
+  const nameY = photoY + photoH + h * 0.025;
+  const nameFs = fitText(doc, (d.name || '').toUpperCase(), w - 8, 'Helvetica-Bold', 8.5, 5.5);
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor('#111111')
+    .text((d.name || 'GUARD NAME').toUpperCase(), x + 4, nameY, { width: w - 8, align: 'center', lineBreak: false });
+
+  // ── Fields ──
+  const fieldPad = w * 0.06;
+  const labelX = x + fieldPad;
+  const colonX = x + w * 0.48;
+  const valX = x + w * 0.51;
+  const valW = x + w - fieldPad - valX;
+  const fieldFs = 6;
+  const lineH = h * 0.065;
+  let fy = nameY + nameFs + h * 0.025;
+
+  // Divider
+  doc.moveTo(x + 6, fy - 3).lineTo(x + w - 6, fy - 3).lineWidth(0.5).strokeColor('#eeeeee').stroke();
+
+  const fields = [
+    ['ID', d.staffId || 'N/A'],
+    ['Contact', d.contact || 'N/A'],
+    ['Blood', d.bloodGroup || 'N/A'],
+  ];
+
+
+  fields.forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
+      .text(lbl, labelX, fy, { lineBreak: false });
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
+      .text(':', colonX, fy, { lineBreak: false });
+    const vfs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
+    doc.font('Helvetica-Bold').fontSize(vfs).fillColor('#111111')
+      .text(String(val), valX, fy, { lineBreak: false });
+    fy += lineH;
+  });
+
+  // ── Bottom section: QR Left, Signature Right ──
+  const bottomY = h * 0.88;
+
+  // QR code bottom left
+  const qrSize = w * 0.18;
+  const qrX = x + w * 0.08, qrY = y + bottomY - qrSize / 2;
+  drawQR(doc, qrX, qrY, qrSize, red);
+
+  // Signature bottom right
+  const sigW = w * 0.55;
+  const sigX = x + w * 0.38, sigY = y + bottomY + qrSize / 4;
+  drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
+
+}
+
+// ── TEMPLATE 5: Staff Navy Wave Horizontal (Image 4 Middle) ──────────────────
+// Navy bg with wave/swoosh, circular photo with gold ring, right side fields,
+// school name header, QR bottom-left, signature bottom-right
+function tStaffNavyWave(doc, x, y, w, h, d) {
+  const navy = resolveColor(d.primaryColor, '#1a2744');
+  const gold = '#c9a227';
+  const cream = '#f5f0e8';
+
+  // Cream background
+  doc.rect(x, y, w, h).fill(cream);
+
+  // ── Navy header with wave shape ──
+  const headerH = h * 0.3;
+  doc.rect(x, y, w, headerH).fill(navy);
+
+  // Wave bottom of header
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+  doc.moveTo(x, y + headerH)
+    .quadraticCurveTo(x + w * 0.25, y + headerH + h * 0.12, x + w * 0.5, y + headerH)
+    .quadraticCurveTo(x + w * 0.75, y + headerH - h * 0.12, x + w, y + headerH)
+    .lineTo(x + w, y)
+    .lineTo(x, y)
+    .closePath()
+    .fill(navy);
+
+  // School QR code (LEFT)
+  const headerQrSize = headerH * 0.55;
+  const qrX = x + w * 0.04, qrY = y + (headerH - headerQrSize) / 2;
+  drawQR(doc, qrX, qrY, headerQrSize, '#ffffff');
+
+  // School Name and Address (RIGHT)
+  const logoSize = headerH * 0.65;
+  const snW = w * 0.52; // Slightly smaller to guarantee gap
+  const snX = x + w - logoSize - snW - w * 0.08;
+  const sName = titleCase(d.schoolName || 'School Name');
+
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 8.5, 6);
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#ffffff')
+    .text(sName, snX, y + headerH * 0.22, { width: snW, align: 'right', lineBreak: false });
+
+  const addrFs = 5.2;
+  doc.font('Helvetica').fontSize(addrFs).fillColor('#99aabb')
+    .text(d.schoolAddress || '', snX, y + headerH * 0.22 + snFs + 2, { width: snW, align: 'right', lineBreak: false });
+
+  // School logo (RIGHT)
+  const logoX = x + w - logoSize - w * 0.04, logoY = y + (headerH - logoSize) / 2;
+  drawLogo(doc, logoX, logoY, logoSize, d.logo);
+
+
+
+
+  // ── Circular photo left center ──
+  const photoR = h * 0.22; // Reduced size to avoid overlap
+  const photoCX = x + w * 0.18;
+  const photoCY = y + headerH + (h - headerH) * 0.45;
+  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, gold, 2);
+
+
+  // ── Fields right ──
+  const fieldsX = x + w * 0.42;
+  const valX = x + w * 0.64;
+  const valW = x + w * 0.95 - valX;
+  const fieldFs = 7;
+  const lineH = h * 0.105;
+  let fy = y + headerH + h * 0.15; // Adjusted start
+
+  // Staff Name above fields
+  const nameW = w * 0.55;
+  const nameX = fieldsX;
+  const nameY = fy - 16;
+  const nameFs = fitText(doc, d.name || 'STAFF NAME', nameW, 'Helvetica-Bold', 10, 7);
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(navy)
+    .text(d.name || 'STAFF NAME', nameX, nameY, { width: nameW, align: 'left', lineBreak: false });
+
+  const staffFields = [
+    ['ID No', d.staffId || 'N/A'],
+    ['Designation', d.designation || 'Staff'],
+    ['Contact', d.contact || 'N/A'],
+  ];
+
+  staffFields.forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#444444')
+      .text(lbl, fieldsX, fy, { lineBreak: false });
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#444444')
+      .text(':', fieldsX + doc.widthOfString(lbl) + 2, fy, { lineBreak: false });
+    const vfs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
+    doc.font('Helvetica-Bold').fontSize(vfs).fillColor('#111111')
+      .text(String(val), valX, fy, { lineBreak: false });
+    fy += lineH;
+  });
+
+
+  // QR removed from bottom to avoid photo overlap
+
+
+
+  // ── Signature bottom-right ──
+  const sigW = w * 0.28;
+  const sigX = x + w * 0.65, sigY = y + h * 0.85; // Lowered signature
+  drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
+
+}
+
+// ── TEMPLATE 6: Staff Blue-Teal Vertical (Image 4 Last) ──────────────────────
+// Portrait card, blue/teal header, circular photo top, colored field rows,
+// QR, signature, colored accent sidebar/footer
+function tStaffBlueTeal(doc, x, y, w, h, d) {
+  const blue = resolveColor(d.primaryColor, '#2b6cb0');
+  const teal = '#1a9e8f';
+  const orange = '#e07020';
+
+  // White background
+  doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Blue header ──
+  const headerH = h * 0.22; // Reduced header
+  doc.rect(x, y, w, headerH).fill(blue);
+
+  // Logo in header left (REVERTED)
+  const logoSize = headerH * 0.6;
+  drawLogo(doc, x + 4, y + (headerH - logoSize) / 2, logoSize, d.logo);
+
+  // School name + address in header (CENTER)
+  const snW = w - logoSize - 12;
+  const snX = x + logoSize + 6;
+  const snY = y + headerH * 0.2;
+  const sName = titleCase(d.schoolName || 'School Name');
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 7.5, 5.5);
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#ffffff')
+    .text(sName, snX, snY, { width: snW, align: 'center', lineBreak: false });
+  const addrFs = 5;
+  doc.font('Helvetica').fontSize(addrFs).fillColor('#c5d8f0')
+    .text(d.schoolAddress || '', snX, snY + snFs + 2, { width: snW, align: 'center', lineBreak: false });
+
+
+
+
+
+  // ── Circular photo below header ──
+  const photoR = w * 0.16; // Reduced to fit vertical height better
+  const photoCX = x + w / 2;
+  const photoCY = y + headerH + photoR + h * 0.02;
+  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, blue, 1.5);
+
+
+  // ── Name under photo ──
+  const nameY = photoCY + photoR + 4;
+  const nameFs = fitText(doc, d.name || 'STAFF NAME', w - 8, 'Helvetica-Bold', 8.5, 5.5);
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor('#111111')
+    .text(d.name || 'STAFF NAME', x + 4, nameY, { width: w - 8, align: 'center', lineBreak: false });
+
+  // Removed ID under name as requested
+  const idFs = 0; // Placeholder for fy calculation
+
+
+  // ── Colored field rows ──
+  const fieldPad = w * 0.05;
+  const labelX = x + fieldPad;
+  const valX = x + w * 0.52;
+  const valW = x + w - fieldPad - valX;
+  const fieldFs = 5.2; // Slightly smaller to fit 4 rows
+  const lineH = h * 0.055; // Reduced line height
+  let fy = nameY + nameFs + 6;
+
+
+
+  const staffFields = [
+    ['Role', d.role],
+    ['Designation', d.designation || d.role],
+    ['ID', d.staffId || 'N/A'],
+    ['Contact', d.contact || 'N/A'],
+  ];
+
+
+
+
+  staffFields.forEach(([lbl, val, highlight], i) => {
+    const rowBg = i % 2 === 0 ? '#f0f4f8' : '#ffffff';
+    doc.rect(x, fy - 1, w, lineH).fill(rowBg);
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#444444')
+      .text(lbl, labelX, fy, { lineBreak: false });
+    const vfs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
+    doc.font('Helvetica-Bold').fontSize(vfs).fillColor(highlight ? '#cc0000' : '#111111')
+      .text(String(val), valX, fy, { lineBreak: false });
+    fy += lineH;
+  });
+
+  // ── Orange bottom accent stripe ──
+  const bottomH = h * 0.08;
+  doc.rect(x, y + h - bottomH, w, bottomH).fill(orange);
+
+  // ── QR bottom (REVERTED) ──
+  const qrSize = w * 0.22;
+  const qrX = x + w * 0.08, qrY = y + h - bottomH - qrSize - 4;
+  drawQR(doc, qrX, qrY, qrSize, blue);
+
+
+
+  // ── Signature bottom right ──
+  const sigW = w * 0.45;
+  const sigX = x + w * 0.48;
+  const sigY = y + h - bottomH - h * 0.05;
+  drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
+}
+
+// ── TEMPLATE 7: Position Holder Green Vertical (New Design) ─────────────────
+
+function tPositionHolderGreen(doc, x, y, w, h, d) {
+  const green = resolveColor(d.primaryColor, '#1b8a4a');
+  const greenDark = darken(green, 0.25);
+  const greenLight = lighten(green, 0.8);
+
+  // White background
+  doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Green Shield Header ──
+  const headerH = h * 0.22;
+  doc.rect(x, y, w, headerH).fill(green);
+
+  // V-Shape/Shield bottom
+  doc.save();
+  doc.moveTo(x, y + headerH)
+    .lineTo(x + w * 0.5, y + headerH + h * 0.15)
+    .lineTo(x + w, y + headerH)
+    .lineTo(x + w, y)
+    .lineTo(x, y)
+    .closePath()
+    .fill(green);
+  doc.restore();
+
+  // School Logo (TOP LEFT)
+  const logoSize = headerH * 0.45;
+  drawLogo(doc, x + w * 0.04, y + 4, logoSize, d.logo);
+
+  // School name and info in header (RIGHT ALIGNED)
+  const snW = w * 0.65;
+  const snX = x + w - snW - w * 0.04;
+  const snY = y + 8;
+  const sName = titleCase(d.schoolName || 'School Name');
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 8, 6);
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#ffffff')
+    .text(sName, snX, snY, { width: snW, align: 'right', lineBreak: false });
+
+  const addrFs = 5;
+  doc.font('Helvetica').fontSize(addrFs).fillColor('#e0e0e0')
+    .text(d.schoolAddress || '', snX, snY + snFs + 2, { width: snW, align: 'right', lineBreak: false });
+
+  // "POSITION HOLDER" text (CENTERED)
+  doc.font('Helvetica-Bold').fontSize(5.5).fillColor('#ffffff')
+    .text('POSITION HOLDER', x, snY + snFs + addrFs + 6, { width: w, align: 'center', lineBreak: false });
+
+
+
+
+  // ── Hexagon Profile Frame ──
+  const hexR = w * 0.22;
+  const hexCX = x + w / 2;
+  const hexCY = y + headerH + h * 0.08;
+
+  // Outer frame
+  drawHexagon(doc, hexCX, hexCY, hexR + 3, greenDark);
+  drawHexagon(doc, hexCX, hexCY, hexR, '#ffffff');
+  drawHexagonPhoto(doc, d.profileImage, hexCX, hexCY, hexR - 2);
+
+  // ── Name and Selection below ──
+  const nameY = hexCY + hexR + h * 0.06;
+  const nameFs = fitText(doc, (d.name || 'NAME HERE').toUpperCase(), w - 10, 'Helvetica-Bold', 10, 7);
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(green)
+    .text((d.name || 'NAME HERE').toUpperCase(), x + 5, nameY, { width: w - 10, align: 'center', lineBreak: false });
+
+  // HEAD BOY / HEAD GIRL based on selection
+  const posText = (d.position || 'Head Boy').toUpperCase();
+  doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#444444')
+    .text(posText, x + 5, nameY + nameFs + 4, { width: w - 10, align: 'center', lineBreak: false });
+
+  // ── Fields (Student style) ──
+  const fieldPad = w * 0.1;
+  const labelX = x + fieldPad;
+  const valX = x + w * 0.52;
+  const valW = x + w - fieldPad - valX;
+  const fieldFs = 6.5;
+  const lineH = h * 0.075;
+  let fy = nameY + nameFs + 22;
+
+  const fields = [
+    ['Student ID', d.studentId || 'N/A'],
+    ['Roll No', d.roll || 'N/A'],
+    ['Class', d.class || 'N/A'],
+  ];
+
+  fields.forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
+      .text(lbl, labelX, fy, { lineBreak: false });
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
+      .text(' :', labelX + doc.widthOfString(lbl) + 1, fy, { lineBreak: false });
+    const vfs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
+    doc.font('Helvetica-Bold').fontSize(vfs).fillColor('#111111')
+      .text(String(val), valX, fy, { lineBreak: false });
+    fy += lineH;
+  });
+
+  // ── QR bottom left ──
+  const qrSize = w * 0.2;
+  drawQR(doc, x + w * 0.08, y + h - qrSize - 6, qrSize, green);
+
+  // ── Signature bottom right ──
+  const sigW = w * 0.42;
+  drawSignature(doc, d.principalName, x + w * 0.52, y + h - h * 0.08, sigW, '#333333');
+}
+
+
+// ── TEMPLATE 8: Class Monitor Blue Horizontal (New Design) ────────────────
+function tClassMonitorBlue(doc, x, y, w, h, d) {
+  const blue = resolveColor(d.primaryColor, '#1a2744');
+  const blueDark = darken(blue, 0.25);
+  const blueLight = lighten(blue, 0.8);
+
+  // White background
+  doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Top Diagonal Blue Split (Header) ──
+  doc.save();
+  doc.moveTo(x + w * 0.42, y)
+    .lineTo(x + w, y)
+    .lineTo(x + w, y + h * 0.28)
+    .lineTo(x + w * 0.32, y + h * 0.28)
+    .closePath()
+    .fill(blue);
+  doc.restore();
+
+  // ── Bottom Diagonal Blue Split (Footer - SMALLER) ──
+  doc.save();
+  doc.moveTo(x, y + h * 0.84)
+    .lineTo(x + w * 0.48, y + h * 0.84)
+    .lineTo(x + w * 0.40, y + h)
+    .lineTo(x, y + h)
+    .closePath()
+    .fill(blue);
+  doc.restore();
+
+  // QR in Top-Left (where logo was)
+  const qrSize = h * 0.18;
+  drawQR(doc, x + w * 0.06, y + h * 0.06, qrSize, blue);
+
+  // Logo in Top-Right (Blue area, next to school name)
+  const logoSize = h * 0.16;
+  const logoX = x + w * 0.44;
+  drawLogo(doc, logoX, y + h * 0.06, logoSize, d.logo);
+
+  // School name in Top-Right (shifted for logo)
+  const sName = titleCase(d.schoolName || 'School Name');
+  const snW = w * 0.38;
+  const snX = logoX + logoSize + 6;
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 9, 6);
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#ffffff')
+    .text(sName, snX, y + h * 0.07, { width: snW, align: 'left', lineBreak: false });
+
+  // "CLASS MONITOR" below school name
+  doc.font('Helvetica').fontSize(6).fillColor('#ffffff')
+    .text('CLASS MONITOR', snX, y + h * 0.07 + snFs + 1, { width: snW, align: 'left', lineBreak: false });
+
+
+  // ── Square photo on the left ──
+  const photoW = w * 0.22, photoH = h * 0.38;
+  const photoX = x + w * 0.08, photoY = y + h * 0.3;
+  doc.rect(photoX - 1.5, photoY - 1.5, photoW + 3, photoH + 3).fill(blueDark);
+  drawSquarePhoto(doc, d.profileImage, photoX, photoY, photoW, photoH, 0);
+
+  // ── Student info on the right ──
+  const fieldsX = x + w * 0.42;
+  const valX = x + w * 0.65;
+  const valW = x + w * 0.95 - valX;
+  const fieldFs = 7.5;
+  const lineH = h * 0.12;
+  let fy = y + h * 0.32;
+
+  const fields = [
+    ['Student Name', d.name || 'N/A'],
+    ['Student ID', d.studentId || 'N/A'],
+    ['Roll No', d.roll || 'N/A'],
+    ['Class', d.class || 'N/A'],
+  ];
+
+  fields.forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#444444')
+      .text(lbl, fieldsX, fy, { lineBreak: false });
+    doc.font('Helvetica').fontSize(fieldFs).fillColor('#444444')
+      .text(' :', fieldsX + doc.widthOfString('Student Name') + 4, fy, { lineBreak: false });
+    const vfs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
+    doc.font('Helvetica-Bold').fontSize(vfs).fillColor('#111111')
+      .text(String(val), valX, fy, { lineBreak: false });
+    fy += lineH;
+  });
+
+  // ── Address and Contact in Bottom-Left (Blue area - Adjusted) ──
+  const footerX = x + w * 0.04;
+  const footerW = w * 0.38;
+  const footerY = y + h * 0.87;
+  doc.font('Helvetica').fontSize(4.5).fillColor('#ffffff')
+    .text(d.schoolAddress || '', footerX, footerY, { width: footerW, lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(4.5).fillColor('#ffffff')
+    .text(d.contact || 'Phone: N/A', footerX, footerY + 7, { width: footerW, lineBreak: false });
+
+  // ── Principal Signature bottom right ──
+  const sigW = w * 0.28;
+  drawSignature(doc, d.principalName, x + w * 0.68, y + h * 0.86, sigW, '#333333');
+}
+
+// ── Placeholder fallback template ─────────────────────────────────────────────
+
+function tPlaceholder(doc, x, y, w, h, d) {
+  doc.rect(x, y, w, h).fill('#f5f5f5');
+  doc.rect(x, y, w, h).lineWidth(1).strokeColor('#ccc').stroke();
+  doc.fillColor('#999').font('Helvetica-Bold').fontSize(12)
+    .text('Template Coming Soon', x, y + h / 2 - 6, { width: w, align: 'center', lineBreak: false });
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
 
 function drawTemplate(doc, x, y, w, h, tpl, d) {
+  console.log('✏️ DRAWING TEMPLATE:', { tpl, role: d.role });
   const map = {
-    'student-vertical-blue': tStudentVBlue,
-    'student-horizontal-wave': tStudentHWave,
-    'teacher-horizontal-green': tTeacherHGreen,
-    'staff-vertical-orange': tStaffVOrange,
-    'security-horizontal-red': tSecurityHRed,
-    'support-staff-horizontal-purple': tSupportStaffHPurple,
-    'position-holder-black-gold': tPositionHolderV,
-    'class-monitor-horizontal': tClassMonitorH,
-    // backward compat alias
-    'class-monitor-vertical': tClassMonitorH
+
+    'student-teal-horizontal': tStudentTeal,
+    'student-navy-horizontal': tStudentNavy,
+    'teacher-cream-horizontal': tTeacherCream,
+    'security-red-vertical': tSecurityRed,
+    'staff-navy-wave': tStaffNavyWave,
+    'staff-blue-teal-vertical': tStaffBlueTeal,
+    'position-holder-green': tPositionHolderGreen,
+    'class-monitor-blue': tClassMonitorBlue,
   };
-  const f = map[tpl] || tStudentVBlue;
+
+
+  const f = map[tpl] || tPlaceholder;
   f(doc, x, y, w, h, d);
 }
 
-// ── Data helpers ──────────────────────────────────────────────────────────────
-
-async function getPersonData(req, schoolId, role, classId, personId, rollNumber, staffType) {
-  const Student = await getModel(schoolId, 'students');
-  const Staff = await getModel(schoolId, 'staffs');
-  const Class = await getModel(schoolId, 'classes');
-  let p = null, c = null;
-  const isStudentRole = ['student', 'position_holder', 'class_monitor'].includes(role);
-  console.log(`[IDCard] role:${role} classId:${classId} personId:${personId} rollNumber:${rollNumber}`);
-
-  if (isStudentRole) {
-    if (personId) {
-      p = await Student.findById(personId).lean();
-    } else if (role === 'position_holder' && rollNumber) {
-      p = await Student.findOne({ rollNumber: String(rollNumber).trim(), isActive: true, status: 'active' }).lean();
-    } else {
-      const q = { isActive: true, status: 'active' };
-      if (classId) q.classId = classId;
-      p = await Student.findOne(q).sort({ rollNumber: 1 }).lean();
-    }
-    if (p && p.classId) c = await Class.findById(p.classId).lean();
-  } else {
-    if (personId) {
-      p = await Staff.findById(personId).lean();
-    } else {
-      const q = { status: 'active' };
-      if (role === 'security') {
-        q.designation = 'Security Guard';
-      } else if (role === 'teacher') {
-        // BROADENED: match role OR designation containing 'teacher'
-        // Use $or so we catch both field conventions
-        p = await Staff.findOne({
-          status: 'active',
-          $or: [
-            { role: 'teacher' },
-            { role: 'Teacher' },
-            { designation: { $regex: /teacher/i } }
-          ]
-        }).lean();
-      } else if (role === 'staff' && staffType) {
-        q.designation = staffType;
-      }
-      if (!p) p = await Staff.findOne(q).lean();
-      if (!p && role === 'security') {
-        p = { name: '', staffId: '', designation: 'Security Guard', contact: '', profilePicture: null };
-      }
-    }
-  }
-  return { p, c };
-}
-
-function buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position) {
-  return {
-    schoolName: school?.schoolName || 'Sample School',
-    schoolAddress: school?.address || 'Sample Address',
-    logo: logoBuffer,
-    profileImage: profileBuffer,
-    primaryColor,
-    role,
-    name: p.name || p.fullName || 'Name',
-    class: c ? `${c.className} ${c.section || ''}`.trim() : '',
-    section: c?.section || '',
-    roll: p.rollNumber || '',
-    studentId: p.studentId || '',
-    staffId: p.staffId || '',
-    designation: (role === 'staff' && staffType) ? staffType : (p.designation || ''),
-    subject: p.subject || '',
-    department: p.department || '',
-    contact: p.contact || p.phone || '',
-    joinDate: p.joinDate || p.joiningDate || '',
-    bloodGroup: p.bloodGroup || '',
-    dob: p.dateOfBirth || p.dob || '',
-    position: position || '',
-    session: c?.academicYear || '2025-2026'
-  };
-}
-
-// ── Exported handlers ─────────────────────────────────────────────────────────
+// ── Handlers ──────────────────────────────────────────────────────────────────
 
 export const getClassesForIDCard = async (req, res) => {
   try {
@@ -685,54 +1127,159 @@ export const getStaffForIDCard = async (req, res) => {
   try {
     const { schoolId } = req;
     const Staff = await getModel(schoolId, 'staffs');
-    // Return ALL active staff — frontend filters by role/designation
-    const staff = await Staff.find({ status: 'active' })
-      .select('name staffId designation profilePicture contact role')
-      .lean();
+    const staff = await Staff.find({ status: 'active' }).select('name staffId designation profilePicture contact').lean();
     res.status(200).json({ success: true, data: staff });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error fetching staff' });
   }
 };
 
+async function getPersonData(req, schoolId, role, classId, personId, rollNumber, staffType) {
+  const Student = await getModel(schoolId, 'students');
+  const Staff = await getModel(schoolId, 'staffs');
+  const Class = await getModel(schoolId, 'classes');
+  let p, c = null;
+  const isStudentRole = ['student', 'position_holder', 'class_monitor'].includes(role);
+  if (isStudentRole) {
+    if (personId) { p = await Student.findById(personId).lean(); }
+    else if (['position_holder', 'class_monitor'].includes(role) && rollNumber) {
+      const q = { rollNumber: String(rollNumber).trim(), isActive: true, status: 'active' };
+      if (classId) q.classId = classId;
+      p = await Student.findOne(q).lean();
+    } else {
+      const q = { isActive: true, status: 'active' };
+      if (classId) q.classId = classId;
+      p = await Student.findOne(q).sort({ rollNumber: 1 }).lean();
+    }
+    if (p && p.classId) c = await Class.findById(p.classId).lean();
+  } else {
+    if (personId) {
+      p = await Staff.findById(personId).lean();
+    } else {
+      const q = { status: 'active' };
+      if (role === 'security') q.designation = 'Security Guard';
+      else if (role === 'teacher') q.role = 'teacher';
+      else if (role === 'staff' && staffType) q.designation = staffType;
+      p = await Staff.findOne(q).lean();
+      if (!p && role === 'security') p = { name: '', staffId: '', designation: 'Security Guard', contact: '', profilePicture: null };
+    }
+    // Fetch class if staff is a teacher
+    if (p && role === 'teacher') {
+      // 1. Check if they are a primary Class Teacher
+      c = await Class.findOne({ classTeacher: p._id, isActive: true }).lean();
+
+      // 2. Fallback: Check their assignedClasses array
+      if (!c && p.assignedClasses && p.assignedClasses.length > 0) {
+        const firstAssigned = p.assignedClasses[0];
+        const classId = firstAssigned.classId || (typeof firstAssigned === 'object' ? firstAssigned._id : firstAssigned);
+        if (classId) {
+          c = await Class.findById(classId).lean();
+        }
+      }
+    }
+  }
+
+
+  return { p, c };
+}
+
+
+function buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position, principalNameOverride) {
+  return {
+    schoolName: school?.schoolName || 'Sample School',
+    schoolAddress: school?.address || 'Sample Address',
+    logo: logoBuffer,
+    profileImage: profileBuffer,
+    primaryColor,
+    role: (role || p?.role || 'Staff').charAt(0).toUpperCase() + (role || p?.role || 'Staff').slice(1),
+    name: p.name || p.fullName || 'Name',
+    class: c ? `${c.className} ${c.section || ''}`.trim() : (p.class || ''),
+    section: c?.section || '',
+    roll: p.rollNumber || '',
+    studentId: p.studentId || '',
+    staffId: p.staffId || '',
+    designation: (role === 'staff' && staffType) ? staffType : (p.designation || ''),
+    subject: p.subject || '',
+    department: p.department || '',
+    contact: p.contact || p.phone || '',
+    joinDate: p.joinDate || p.joiningDate || '',
+    bloodGroup: p.bloodGroup || '',
+    gender: p.gender || '',
+    dob: p.dateOfBirth || p.dob || '',
+    fatherName: p.fatherName || p.guardianName || '',
+    address: p.address || '',
+    session: c?.academicYear || '2025-2026',
+    position: position || '',
+    principalName: principalNameOverride || school?.principalName || school?.principal || 'Principal',
+  };
+}
+
 export const previewIDCard = async (req, res) => {
-  console.log('[IDCard preview] body:', req.body);
+  let doc;
   try {
     const { schoolId } = req;
-    const { role = 'student', classId, templateName, personId, rollNumber, staffType, cardWidth, cardHeight, primaryColor, position } = req.body;
+    const { role = 'student', classId, templateName, personId, rollNumber, staffType, cardWidth, cardHeight, primaryColor, position, principalName } = req.body;
+
     const school = await School.findById(schoolId).lean();
     let { p, c } = await getPersonData(req, schoolId, role, classId, personId, rollNumber, staffType);
+
     if (!p) {
       p = {
-        name: 'Name', fullName: 'Name', rollNumber: '0000', studentId: 'ST-0000', staffId: 'EMP-0000',
-        designation: staffType || (role === 'teacher' ? 'Teacher' : role === 'security' ? 'Security Guard' : 'Staff'),
-        contact: '000-0000000', phone: '000-0000000', profilePicture: null
+        name: 'Name', fullName: 'Name', rollNumber: '0000', studentId: 'ST-0000',
+        staffId: 'EMP-0000', designation: staffType || (role === 'teacher' ? 'Teacher' : role === 'security' ? 'Security Guard' : 'Staff'),
+        contact: '000-0000000', phone: '000-0000000', profilePicture: null,
+        bloodGroup: 'B+', gender: 'Male', fatherName: 'Father Name', address: 'School Address'
       };
       c = { className: 'Class X', section: 'A' };
     }
-    const logoBuffer = await fetchBuf(school?.logo?.url, req);
-    const profileBuffer = await fetchBuf(p.profilePicture, req);
+
+    const [logoBuffer, profileBuffer] = await Promise.all([
+      fetchBuf(school?.logo?.url || school?.logo, req),
+      fetchBuf(p.profilePicture, req)
+    ]);
+
     const { w, h } = dims(cardWidth, cardHeight, templateName);
-    const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+    doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+
+    doc.on('error', (err) => {
+      console.error('🔥 PDFKit Error:', err);
+    });
+
+    res.on('close', () => {
+      if (doc) doc.unpipe(res);
+    });
+
     doc.addPage({ size: [w, h], margin: 0 });
     res.setHeader('Content-Type', 'application/pdf');
     doc.pipe(res);
-    drawTemplate(doc, 0, 0, w, h, templateName, buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position));
+
+    drawTemplate(doc, 0, 0, w, h, templateName, buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position, principalName));
     doc.end();
+
   } catch (error) {
-    console.error('Preview error:', error);
-    if (!res.headersSent) res.status(500).json({ success: false, message: 'Failed to generate preview' });
+    console.error('🔥 PREVIEW ERROR:', error);
+    if (doc) {
+      try { doc.unpipe(res); doc.end(); } catch (e) { }
+    }
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Failed to generate preview', error: error.message });
+    }
   }
 };
 
+
+
 export const generateIDCards = async (req, res) => {
+  let doc;
   try {
     const { schoolId } = req;
-    const { role = 'student', classId, templateName, personId, rollNumber, staffType, cardWidth, cardHeight, primaryColor, position } = req.body;
+    const { role = 'student', classId, templateName, personId, rollNumber, staffType, cardWidth, cardHeight, primaryColor, position, principalName } = req.body;
+
     const Student = await getModel(schoolId, 'students');
     const Staff = await getModel(schoolId, 'staffs');
     const Class = await getModel(schoolId, 'classes');
     const school = await School.findById(schoolId).lean();
+
     let people = [], c = null;
     const isStudentRole = ['student', 'position_holder', 'class_monitor'].includes(role);
 
@@ -754,56 +1301,55 @@ export const generateIDCards = async (req, res) => {
         const s = await Staff.findById(personId).lean();
         if (s) people = [s];
       } else {
-        let staffQuery;
-        if (role === 'security') {
-          staffQuery = { status: 'active', designation: 'Security Guard' };
-          people = await Staff.find(staffQuery).lean();
-        } else if (role === 'teacher') {
-          // BROADENED query
-          people = await Staff.find({
-            status: 'active',
-            $or: [
-              { role: 'teacher' },
-              { role: 'Teacher' },
-              { designation: { $regex: /teacher/i } }
-            ]
-          }).lean();
-        } else if (role === 'staff' && staffType) {
-          people = await Staff.find({ status: 'active', designation: staffType }).lean();
-        } else {
-          people = await Staff.find({ status: 'active' }).lean();
-        }
+        const q = { status: 'active' };
+        if (role === 'security') q.designation = 'Security Guard';
+        else if (role === 'teacher') q.role = 'teacher';
+        else if (role === 'staff' && staffType) q.designation = staffType;
+        people = await Staff.find(q).lean();
       }
     }
 
     if (people.length === 0) {
       if (role === 'security' && !personId) {
-        people = [{ name: '', staffId: '', designation: 'Security Guard', contact: '', profilePicture: null }];
+        people = [{ name: 'Guard Name', staffId: 'G-001', designation: 'Security Guard', contact: '000-0000', profilePicture: null }];
       } else {
         return res.status(404).json({ success: false, message: 'No active records found' });
       }
     }
 
-    const logoBuffer = await fetchBuf(school?.logo?.url, req);
+    const logoBuffer = fetchBuf(school?.logo?.url || school?.logo, req);
     const { w, h } = dims(cardWidth, cardHeight, templateName);
     const spacing = 15;
     const cols = Math.floor((A4W - spacing) / (w + spacing)) || 1;
     const rows = Math.floor((A4H - spacing) / (h + spacing)) || 1;
     const cardsPerPage = cols * rows;
+
     const marginX = (A4W - (cols * w + (cols - 1) * spacing)) / 2;
     const marginY = (A4H - (rows * h + (rows - 1) * spacing)) / 2;
 
-    const doc = new PDFDocument({ size: 'A4', margin: 0 });
+    doc = new PDFDocument({ size: 'A4', margin: 0 });
+
+    doc.on('error', (err) => {
+      console.error('🔥 PDF Generation Error:', err);
+    });
+
+    res.on('close', () => {
+      if (doc) doc.unpipe(res);
+    });
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="ID_Cards_${role}.pdf"`);
     doc.pipe(res);
-    let cardsOnPage = 0;
 
+    let cardsOnPage = 0;
     for (let i = 0; i < people.length; i++) {
-      const person = people[i];
-      if (cardsOnPage === cardsPerPage) { doc.addPage(); cardsOnPage = 0; }
+      if (cardsOnPage === cardsPerPage) {
+        doc.addPage();
+        cardsOnPage = 0;
+      }
+
       if (cardsOnPage === 0) {
-        doc.save(); doc.lineWidth(0.5); doc.strokeColor('#ccc'); doc.dash(3, { space: 3 });
+        doc.save().lineWidth(0.5).strokeColor('#ccc').dash(3, { space: 3 });
         for (let j = 0; j <= cols; j++) {
           const lX = marginX + j * (w + spacing) - spacing / 2;
           if (lX > 0 && lX < A4W) doc.moveTo(lX, 0).lineTo(lX, A4H).stroke();
@@ -814,180 +1360,30 @@ export const generateIDCards = async (req, res) => {
         }
         doc.restore();
       }
-      const col = cardsOnPage % cols, row = Math.floor(cardsOnPage / cols);
-      const px3 = marginX + col * (w + spacing), py2 = marginY + row * (h + spacing);
-      const profileBuffer = await fetchBuf(person.profilePicture, req);
-      drawTemplate(doc, px3, py2, w, h, templateName, buildData(person, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position));
+
+      const col = cardsOnPage % cols;
+      const row = Math.floor(cardsOnPage / cols);
+      const px = marginX + col * (w + spacing);
+      const py = marginY + row * (h + spacing);
+
+      const person = people[i];
+      let personCls = c;
+      if (role === 'teacher') personCls = await Class.findOne({ classTeacher: person._id.toString(), isActive: true }).lean();
+
+      const [lBuf, pBuf] = await Promise.all([logoBuffer, fetchBuf(person.profilePicture, req)]);
+      drawTemplate(doc, px, py, w, h, templateName, buildData(person, personCls, school, pBuf, lBuf, primaryColor, role, staffType, position, principalName));
       cardsOnPage++;
     }
+
     doc.end();
+
   } catch (error) {
-    console.error('Generation error:', error);
-    if (!res.headersSent) res.status(500).json({ success: false, message: 'Server error generating ID cards' });
+    console.error('🔥 GENERATION ERROR:', error);
+    if (doc) {
+      try { doc.unpipe(res); doc.end(); } catch (e) { }
+    }
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Server error generating ID cards', error: error.message });
+    }
   }
 };
-
-// Layout grid cut lines builder
-function drawCutLines(doc) {
-  doc.save();
-  doc.lineWidth(0.5);
-  doc.strokeColor('#cccccc');
-  doc.dash(3, {space: 3});
-
-  // Vertical Cut Lines (3 lines)
-  [MARGIN_X/2, MARGIN_X + CARD_WIDTH + MARGIN_X/2, A4_WIDTH - MARGIN_X/2].forEach(x => {
-    doc.moveTo(x, 0).lineTo(x, A4_HEIGHT).stroke();
-  });
-  
-  // Horizontal Cut Lines (5 lines)
-  [MARGIN_Y/2, MARGIN_Y + CARD_HEIGHT + MARGIN_Y/2, MARGIN_Y*2 + CARD_HEIGHT*2 + MARGIN_Y/2, MARGIN_Y*3 + CARD_HEIGHT*3 + MARGIN_Y/2, A4_HEIGHT - MARGIN_Y/2].forEach(y => {
-    doc.moveTo(0, y).lineTo(A4_WIDTH, y).stroke();
-  });
-
-  doc.restore();
-}
-
-function drawIDCard(doc, x, y, w, h, templateName, data) {
-    let primaryColor, secondaryColor, textColor;
-
-    switch (templateName) {
-        case 'template-2':
-            primaryColor = '#2f855a'; 
-            secondaryColor = '#e6fffa';
-            textColor = '#1a202c';
-            break;
-        case 'template-3':
-            primaryColor = '#c53030'; 
-            secondaryColor = '#fff5f5';
-            textColor = '#1a202c';
-            break;
-        case 'template-4':
-            primaryColor = '#6b46c1';
-            secondaryColor = '#faf5ff';
-            textColor = '#1a202c';
-            break;
-        case 'template-5':
-            primaryColor = '#2d3748';
-            secondaryColor = '#f7fafc';
-            textColor = '#1a202c';
-            break;
-        case 'template-1':
-        default:
-            primaryColor = '#2b6cb0';
-            secondaryColor = '#ebf8ff';
-            textColor = '#2d3748';
-            break;
-    }
-
-    // Border and Fill
-    doc.roundedRect(x, y, w, h, 8).fill(secondaryColor);
-    doc.roundedRect(x, y, w, h, 8).lineWidth(1).stroke(primaryColor);
-
-    // Header Background
-    doc.save()
-       .roundedRect(x, y, w, 45, 8)
-       .roundedRect(x, y + 25, w, 20, 0)
-       .clip()
-       .rect(x, y, w, 45)
-       .fill(primaryColor)
-       .restore();
-
-    // Logo Box Profile Standard Sizing
-    const logoSize = 36;
-    const logoX = x + 8;
-    const logoY = y + 4;
-    
-    // Fill a dedicated logo frame container
-    doc.save();
-    if (templateName === 'template-1' || templateName === 'template-5') {
-       doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2).fill('#ffffff');
-       if (data.logo) {
-         try {
-             doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2).clip();
-             doc.image(data.logo, logoX, logoY, { width: logoSize, height: logoSize });
-         } catch (e) {
-             console.error('Logo render failed');
-         }
-       }
-    } else {
-       doc.roundedRect(logoX, logoY, logoSize, logoSize, 4).fill('#ffffff');
-       if (data.logo) {
-         try {
-             doc.image(data.logo, logoX + 2, logoY + 2, { width: logoSize - 4, height: logoSize - 4 });
-         } catch (e) {
-             console.error('Logo render failed');
-         }
-       }
-    }
-    doc.restore();
-
-    // School Name & Address
-    doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold')
-       .text(data.schoolName || 'School Name', x + 50, y + 10, { width: w - 55, align: 'left' });
-
-    if (data.schoolAddress) {
-       doc.fontSize(6).font('Helvetica').text(data.schoolAddress, x + 50, y + 21, { width: w - 55, height: 20 });
-    }
-
-    // Photo Box exactly 80x80 pixels => inside PDF point sizing equivalent 
-    // Wait, PDFKit converts directly from coordinates. The instructions specify 80x80 "pixels" for profile.
-    // 80 units in PDFKit ~ 80 points.
-    const photoSize = 60; // We'll maintain ~60 pts width and height to fit on the tiny card natively
-    const photoX = x + w - photoSize - 10;
-    const photoY = y + 50;
-
-    // Draw circular outline if template-2 or template-4
-    if (templateName === 'template-2' || templateName === 'template-4') {
-        doc.circle(photoX + photoSize/2, photoY + photoSize/2, photoSize/2).lineWidth(2).stroke(primaryColor);
-        if (data.profileImage) {
-            try {
-                doc.save();
-                doc.circle(photoX + photoSize/2, photoY + photoSize/2, photoSize/2).clip();
-                // 80x80 target restriction handled inherently via width and height explicit config
-                doc.image(data.profileImage, photoX, photoY, { width: photoSize, height: photoSize });
-                doc.restore();
-            } catch (e) { doc.restore(); }
-        }
-    } else {
-        doc.rect(photoX, photoY, photoSize, photoSize).lineWidth(2).stroke(primaryColor);
-        if (data.profileImage) {
-            try {
-                doc.image(data.profileImage, photoX, photoY, { width: photoSize, height: photoSize });
-            } catch (e) {}
-        }
-    }
-
-    // Fields rendering variables
-    const labelX = x + 10;
-    let dataY = y + 52;
-    const fontSize = 7;
-
-    doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(9).text(data.name, labelX, dataY, { width: w - photoSize - 25 });
-    dataY += 13;
-
-    doc.fillColor(textColor).font('Helvetica-Bold').fontSize(fontSize).text('Class:', labelX, dataY, { continued: true })
-       .font('Helvetica').text(` ${data.class}`);
-    dataY += 10;
-
-    doc.font('Helvetica-Bold').text('Roll No:', labelX, dataY, { continued: true })
-       .font('Helvetica').text(` ${data.roll || 'N/A'}`);
-    dataY += 10;
-
-    doc.font('Helvetica-Bold').text('Student ID:', labelX, dataY, { continued: true })
-       .font('Helvetica').text(` ${data.studentId !== 'N/A' ? data.studentId : '-'}`);
-    dataY += 10;
-
-    doc.font('Helvetica-Bold').text('Session:', labelX, dataY, { continued: true })
-       .font('Helvetica').text(` ${data.session}`);
-    dataY += 10;
-
-    if (data.parentPhone && data.parentPhone !== 'N/A') {
-        doc.font('Helvetica-Bold').text('Emergency:', labelX, dataY, { continued: true })
-           .font('Helvetica').text(` ${data.parentPhone}`);
-    }
-
-    // Footer
-    doc.rect(x, y + h - 14, w, 14).fill(primaryColor);
-    doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold')
-       .text('STUDENT IDENTITY CARD', x, y + h - 10, { width: w, align: 'center' });
-}
