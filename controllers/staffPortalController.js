@@ -343,7 +343,7 @@ export const getClassStudents = async (req, res) => {
 
     const Student = await getModel(req.schoolId, 'students');
     const students = await Student.find({ classId, status: 'active' })
-      .select('fullName rollNumber gender parentPhone parentName fatherName parentAccessCode')
+      .select('fullName rollNumber gender parentPhone parentName fatherName parentAccessCode profilePicture')
       .sort({ rollNumber: 1 });
 
     return res.status(200).json({

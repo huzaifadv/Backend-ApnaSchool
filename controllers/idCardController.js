@@ -231,6 +231,12 @@ function tStudentTeal(doc, x, y, w, h, d) {
   const tealLight = lighten(teal, 0.6);
 
   // White background
+// ── TEMPLATE 1: Student Vertical — PROFESSIONAL ───────────────────────────────
+function tStudentVBlue(doc, x, y, w, h, d) {
+  const p = resolveColor(d.primaryColor, '#6b21a8');
+  const dk = darken(p, 0.24);
+  const lt = lighten(p, 0.92);
+
   doc.rect(x, y, w, h).fill('#ffffff');
 
   // ── Top-right teal decorative area ──
@@ -563,6 +569,161 @@ function tTeacherCream(doc, x, y, w, h, d) {
   const sigX = x + w * 0.65, sigY = y + h * 0.88; // Lowered
   drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
 
+  // Header band
+  const hH = h * 0.2;
+  doc.rect(x, y, w, hH).fill(p);
+  doc.save();
+  doc.polygon([x + w * 0.6, y], [x + w, y], [x + w, y + hH], [x + w * 0.8, y + hH]).fill(dk);
+  doc.restore();
+
+  const logoSz = hH * 0.62;
+  drawLogo(doc, x + 10, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
+
+  const snX = x + 12 + logoSz;
+  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.28, 10.5))
+    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.16, { lineBreak: false, width: w * 0.58 });
+  doc.fillColor('rgba(255,255,255,0.82)').font('Helvetica').fontSize(Math.min(hH * 0.17, 7))
+    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.54, { lineBreak: false, width: w * 0.58 });
+
+  // Card type badge
+  const badgeW = w * 0.3;
+  const badgeH = hH * 0.42;
+  const badgeX = x + w - badgeW - 10;
+  const badgeY = y + hH * 0.12;
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 4).fill('#ffffff');
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 4).lineWidth(0.8).stroke(dk);
+  doc.fillColor(dk).font('Helvetica-Bold').fontSize(Math.min(badgeH * 0.4, 7))
+    .text('STUDENT ID', badgeX, badgeY + badgeH * 0.3, { width: badgeW, align: 'center', lineBreak: false });
+
+  // Hologram circle
+  const holoR = h * 0.04;
+  const holoX = x + w - holoR - 10;
+  const holoY = y + hH + holoR + h * 0.015;
+  doc.save();
+  doc.circle(holoX, holoY, holoR).fill(lt);
+  doc.circle(holoX, holoY, holoR).lineWidth(0.8).stroke(p);
+  doc.restore();
+
+  // Photo block
+  const ps = w * 0.46;
+  const px2 = x + (w - ps) / 2;
+  const pY = y + hH + h * 0.02;
+  doc.save(); doc.rect(px2 + 2, pY + 2, ps, ps).fill('#e5e7eb'); doc.restore();
+  doc.save(); doc.roundedRect(px2 - 2, pY - 2, ps + 4, ps + 4, 6).lineWidth(2).strokeColor(p).stroke(); doc.restore();
+  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
+
+  // Name and class pill
+  const nY = pY + ps + h * 0.022;
+  doc.fillColor(dk).font('Helvetica-Bold').fontSize(h * 0.052)
+    .text((d.name || 'Name').toUpperCase(), x + 6, nY, { width: w - 12, align: 'center', lineBreak: false });
+
+  const classLabel = d.class ? `${d.class}${d.section ? ' - ' + d.section : ''}` : 'N/A';
+  const pillH = h * 0.038;
+  const pillW = w * 0.62;
+  const pillX = x + (w - pillW) / 2;
+  const pillY = nY + h * 0.055;
+  doc.roundedRect(pillX, pillY, pillW, pillH, 8).fill(lt);
+  doc.roundedRect(pillX, pillY, pillW, pillH, 8).lineWidth(0.6).stroke(p);
+  doc.fillColor(dk).font('Helvetica-Bold').fontSize(h * 0.027)
+    .text(classLabel, pillX, pillY + pillH * 0.22, { width: pillW, align: 'center', lineBreak: false });
+
+  // Info block
+  const infoY = pillY + pillH + h * 0.018;
+  doc.rect(x + 8, infoY, w - 16, h * 0.22).fill(lt);
+  const lx = x + 14;
+  const vx = x + w * 0.48;
+  const fs = h * 0.026;
+  const gap = h * 0.05;
+  let fy = infoY + h * 0.02;
+  fRow(doc, 'Roll No.', d.roll || 'N/A', lx, vx, fy, fs); fy += gap;
+  fRow(doc, 'Student ID', d.studentId || 'N/A', lx, vx, fy, fs); fy += gap;
+  fRow(doc, 'DOB', formatDate(d.dob), lx, vx, fy, fs); fy += gap;
+  fRow(doc, 'Blood Group', d.bloodGroup || 'N/A', lx, vx, fy, fs);
+
+  // QR placeholder
+  const qrSize = w * 0.2;
+  const qx = x + 12;
+  const qy = y + h * 0.78;
+  doc.rect(qx, qy, qrSize, qrSize).lineWidth(0.8).stroke(p);
+  for (let i = 0; i < 5; i++) {
+    doc.rect(qx + 3 + i * 4, qy + 3 + (i % 2) * 5, 2.5, 2.5).fill(dk);
+  }
+  doc.fillColor('#777').font('Helvetica').fontSize(Math.max(h * 0.018, 6))
+    .text('Scan', qx, qy + qrSize + 2, { width: qrSize, align: 'center', lineBreak: false });
+
+  // Signature line
+  sigRightV(doc, x, y, w, h, p);
+
+  // Footer band
+  const fh = h * 0.075;
+  const fy2 = y + h - fh;
+  doc.rect(x, fy2, w, fh).fill(p);
+  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.max(fh * 0.3, 7))
+    .text('www.apnaschooledu.com', x, fy2 + fh * 0.3, { width: w, align: 'center', lineBreak: false });
+  doc.fillColor('rgba(255,255,255,0.8)').font('Helvetica').fontSize(Math.max(fh * 0.22, 6))
+    .text('Emergency: ' + (d.parentPhone || d.contact || 'N/A'), x + 8, fy2 + fh * 0.12, { lineBreak: false, width: w - 16 });
+}
+
+// ── TEMPLATE 2: Student Horizontal Wave — GREEN ───────────────────────────────
+function tStudentHWave(doc, x, y, w, h, d) {
+  const p = resolveColor(d.primaryColor, '#1a6b3c');
+  const dk = darken(p, 0.25);
+  const lt = lighten(p, 0.9);
+  doc.rect(x, y, w, h).fill('#ffffff');
+  wm(doc, x, y, w, h, d.logo);
+
+  const hH = h * 0.23;
+  doc.rect(x, y, w, hH).fill(p);
+  const logoSz = hH * 0.65;
+  drawLogo(doc, x + 12, y + (hH - logoSz) / 2, logoSz, d.logo, false, null);
+  const snX = x + 12 + logoSz + 10;
+  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.3, 11))
+    .text((d.schoolName || 'APNA SCHOOL').toUpperCase(), snX, y + hH * 0.16, { lineBreak: false, width: w * 0.45 });
+  doc.fillColor('rgba(255,255,255,0.82)').font('Helvetica').fontSize(Math.min(hH * 0.18, 7.5))
+    .text(d.schoolAddress || 'School Address', snX, y + hH * 0.55, { lineBreak: false, width: w * 0.45 });
+
+  const bw = w * 0.22;
+  doc.rect(x + w - bw, y, bw, hH).fill(dk);
+  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(hH * 0.22, 9))
+    .text('STUDENT\nID CARD', x + w - bw, y + hH * 0.2, { width: bw, align: 'center' });
+
+  const panelW = w * 0.33;
+  doc.rect(x, y + hH, panelW, h - hH).fill(p);
+  const ps = panelW * 0.72;
+  const px2 = x + (panelW - ps) / 2;
+  const pY = y + hH + (h - hH) * 0.1;
+  doc.save(); doc.rect(px2 - 2, pY - 2, ps + 4, ps + 4).fill('#fff'); doc.restore();
+  drawPhoto(doc, d.profileImage, px2, pY, ps, ps);
+
+  // ID strip
+  doc.rect(x, y + h - h * 0.12, panelW, h * 0.12).fill(dk);
+  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(Math.min(h * 0.04, 8))
+    .text('ID: ' + (d.studentId || 'N/A'), x, y + h - h * 0.085, { width: panelW, align: 'center', lineBreak: false });
+
+  const rx = x + panelW + 16;
+  const rw = w - panelW - 22;
+  const nY = y + hH + (h - hH) * 0.08;
+  doc.fillColor(p).font('Helvetica-Bold').fontSize(Math.min(h * 0.1, 18))
+    .text((d.name || 'Name').toUpperCase(), rx, nY, { width: rw, lineBreak: false });
+
+  doc.save(); doc.rect(rx, nY + h * 0.115, rw * 0.7, 1.5).fill(p); doc.restore();
+
+  const fs = Math.min(h * 0.053, 9);
+  const gap = h * 0.09;
+  let fy = nY + h * 0.16;
+  const lvx = rx + rw * 0.45;
+  fRow(doc, 'Class', d.class || 'N/A', rx, lvx, fy, fs); fy += gap;
+  fRow(doc, 'Section', d.section || 'N/A', rx, lvx, fy, fs); fy += gap;
+  fRow(doc, 'Roll No.', d.roll || 'N/A', rx, lvx, fy, fs); fy += gap;
+  fRow(doc, 'Session', d.session || '2025-2026', rx, lvx, fy, fs);
+
+  // Bottom info band
+  doc.rect(x, y + h - h * 0.1, w, h * 0.1).fill(lt);
+  doc.fillColor('#555').font('Helvetica').fontSize(Math.min(h * 0.035, 7.5))
+    .text('Emergency: ' + (d.parentPhone || d.contact || 'N/A'), x + panelW + 14, y + h - h * 0.075, { lineBreak: false, width: w - panelW - 24 });
+
+  sigRightH(doc, rx, rw, y + h * 0.82, p);
+  footer(doc, x, y, w, h, p);
 }
 
 // ── TEMPLATE 4: Security Red Vertical (Image 3 First — Red header vertical) ──

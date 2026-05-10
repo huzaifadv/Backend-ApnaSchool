@@ -24,7 +24,7 @@ export const getClassFeeStatus = async (req, res, next) => {
 
     // Get all students in the class
     const students = await Student.find({ classId, isActive: true })
-      .select('fullName rollNumber monthlyFee feeDueDate classId')
+      .select('fullName rollNumber monthlyFee feeDueDate classId profilePicture')
       .sort({ rollNumber: 1 })
       .lean();
 
@@ -81,6 +81,7 @@ export const getClassFeeStatus = async (req, res, next) => {
         _id: student._id,
         fullName: student.fullName,
         rollNumber: student.rollNumber,
+        profilePicture: student.profilePicture || null,
         monthlyFee: currentMonthFee,
         previousMonthDues: previousRemaining,
         totalDue: totalDue,
