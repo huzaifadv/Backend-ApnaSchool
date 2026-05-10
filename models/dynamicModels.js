@@ -1143,6 +1143,11 @@ const staffSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AcademicYear'
   },
+  designation: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   status: {
     type: String,
     enum: ['active', 'inactive'],
