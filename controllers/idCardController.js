@@ -3,6 +3,11 @@ import axios from 'axios';
 import { getModel } from '../models/dynamicModels.js';
 import School from '../models/School.js';
 
+// Fallback main models (used if tenant models are empty or in non-tenant environments)
+import MainClass from '../models/Class.js';
+import MainStudent from '../models/Student.js';
+import MainTeacher from '../models/Teacher.js';
+
 const MM = 2.83465;
 const A4W = 595.28, A4H = 841.89;
 
@@ -126,13 +131,14 @@ function drawSignature(doc, principalName, x, y, w, color) {
   const c = color || '#111111';
   const name = principalName || 'Principal';
   // Name ABOVE the line - use fitText to prevent wrapping/overlap
-  const sigFs = fitText(doc, name, w, 'Times-BoldItalic', 8, 5);
+  // Proper signature: use Times-BoldItalic and slightly larger/more centered
+  const sigFs = fitText(doc, name, w, 'Times-BoldItalic', 7.5, 5); // Slightly smaller font
   doc.fillColor(c).font('Times-BoldItalic').fontSize(sigFs)
-    .text(name, x, y - sigFs - 1, { width: w, align: 'center', lineBreak: false });
+    .text(name, x, y - sigFs - 0.5, { width: w, align: 'center', lineBreak: false }); // Reduced gap to line
   // The line
-  doc.strokeColor(c).lineWidth(0.5).moveTo(x, y - 1).lineTo(x + w, y - 1).stroke();
+  doc.strokeColor(c).lineWidth(0.4).moveTo(x, y).lineTo(x + w, y).stroke(); // Thinner line
   // Label below the line
-  doc.fillColor(c).font('Helvetica-Bold').fontSize(5).text('Principal Signature', x, y + 1.5, { width: w, align: 'center', lineBreak: false });
+  doc.fillColor(c).font('Helvetica-Bold').fontSize(4.5).text('Principal Signature', x, y + 1.2, { width: w, align: 'center', lineBreak: false });
   doc.restore();
 }
 
@@ -226,9 +232,9 @@ function drawFieldRow(doc, label, value, lx, vx, y, maxFs, lColor, vColor, avail
 // White bg, teal decorative shapes top-right & bottom-left, circular photo left,
 // info right, "STUDENT ID CARD" pill badge, principal signature bottom-right
 function tStudentTeal(doc, x, y, w, h, d) {
-  const teal = resolveColor(d.primaryColor, '#1a9e8f');
-  const tealDark = darken(teal, 0.25);
-  const tealLight = lighten(teal, 0.85);
+  const p = resolveColor(d.primaryColor, '#1a9e8f');
+  const dk = darken(p, 0.25);
+  const lt = lighten(p, 0.85);
 
   // White background
   doc.rect(x, y, w, h).fill('#ffffff');
@@ -236,149 +242,36 @@ function tStudentTeal(doc, x, y, w, h, d) {
   // ── Teal decorative shape top-right ──
   doc.save();
   doc.rect(x, y, w, h).clip();
-  doc.moveTo(x + w * 0.58, y)
-    .lineTo(x + w, y)
-    .lineTo(x + w, y + h * 0.55)
-    .quadraticCurveTo(x + w * 0.82, y + h * 0.38, x + w * 0.68, y + h * 0.12)
-    .quadraticCurveTo(x + w * 0.63, y + h * 0.04, x + w * 0.58, y)
-    .fill(teal);
-
-  // ── Teal decorative shape bottom-left ──
-  doc.moveTo(x, y + h * 0.62)
-    .lineTo(x + w * 0.32, y + h)
-    .lineTo(x, y + h)
-    .fill(teal);
-
-  // Small accent strip bottom-left
-  doc.moveTo(x, y + h * 0.75)
-    .lineTo(x + w * 0.18, y + h)
-    .lineTo(x, y + h)
-    .fill(tealDark);
-  doc.restore();
-
-  // Watermark
-  wm(doc, x, y, w, h, d.logo);
-
-  // ── School logo & name top-left ──
-  const logoSize = h * 0.15;
-  const logoX = x + w * 0.03, logoY = y + h * 0.05;
-  if (d.logo) drawLogo(doc, logoX, logoY, logoSize, d.logo);
-  const sName = titleCase(d.schoolName || 'School Name');
-  const snW = w * 0.38;
-  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 8, 5.5);
-  doc.font('Helvetica-Bold').fontSize(snFs).fillColor(tealDark)
-    .text(sName, logoX + logoSize + 4, logoY + 1, { width: snW, align: 'left', lineBreak: false });
-  doc.font('Helvetica').fontSize(5).fillColor('#666666')
-    .text(d.schoolAddress || '', logoX + logoSize + 4, logoY + snFs + 2, { width: snW, align: 'left', lineBreak: false });
-
-  // ── "STUDENT ID CARD" pill badge ──
-  const badgeW = w * 0.36, badgeH = h * 0.1;
-  const badgeX = x + w * 0.32, badgeY = y + h * 0.04;
-  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(teal);
-  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#ffffff')
-    .text('STUDENT ID CARD', badgeX, badgeY + badgeH * 0.28, { width: badgeW, align: 'center', lineBreak: false });
-
-  // ── Circular photo left ──
-  const photoR = h * 0.23;
-  const photoCX = x + w * 0.18, photoCY = y + h * 0.52;
-  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, teal, 2.5);
-
-  // ── Student name ──
-  const nameW = w * 0.48;
-  const nameFs = fitText(doc, (d.name || '').toUpperCase(), nameW, 'Helvetica-Bold', 11, 7);
-  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(tealDark)
-    .text((d.name || 'STUDENT NAME').toUpperCase(), x + w * 0.4, y + h * 0.2, { width: nameW, align: 'left', lineBreak: false });
-
-  // ── Thin teal divider under name ──
-  doc.rect(x + w * 0.4, y + h * 0.32, w * 0.46, 1).fill(tealLight);
-
-  // ── Fields right of photo ──
-  const fieldsX = x + w * 0.4;
-  const colonX = x + w * 0.58;
-  const valX = x + w * 0.605;
-  const valW = x + w * 0.9 - valX;
-  const fieldFs = 7.5;
-  const lineH = h * 0.115;
-  let fy = y + h * 0.36;
-
-  const fields = [
-    ['Student ID', d.studentId || 'N/A'],
-    ['Roll No',   d.roll      || 'N/A'],
-    ['Class',     d.class     || 'N/A'],
-    ['Session',   d.session   || 'N/A'],
-  ];
-
-  fields.forEach(([lbl, val]) => {
-    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
-      .text(lbl, fieldsX, fy, { lineBreak: false });
-    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
-      .text(':', colonX, fy, { lineBreak: false });
-    const vFs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
-    doc.font('Helvetica-Bold').fontSize(vFs).fillColor('#111111')
-      .text(String(val), valX, fy, { lineBreak: false });
-    fy += lineH;
-  });
-
-  // ── QR code bottom-left ──
-  const qrSize = h * 0.19;
-  drawQR(doc, x + w * 0.03, y + h * 0.78, qrSize, tealDark);
-
-  // ── Contact bottom-center ──
-  doc.font('Helvetica').fontSize(5).fillColor('#777777')
-    .text(d.contact || '', x + w * 0.22, y + h * 0.9, { width: w * 0.42, align: 'center', lineBreak: false });
-
-  // ── Principal signature bottom-right ──
-  const sigW = w * 0.26;
-  drawSignature(doc, d.principalName, x + w * 0.68, y + h * 0.87, sigW, tealDark);
-}
-
-// ── TEMPLATE 1: Student Vertical — PROFESSIONAL ───────────────────────────────
-function tStudentVBlue(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#6b21a8');
-  const dk = darken(p, 0.24);
-  const lt = lighten(p, 0.92);
-
-  doc.rect(x, y, w, h).fill('#ffffff');
-
-  // ── Top-right teal decorative area ──
-  // Large rounded shape top right
-  doc.save();
-  doc.rect(x, y, w, h).clip();
-
-  // Top-right big arc/block
   doc.moveTo(x + w * 0.52, y)
     .lineTo(x + w, y)
     .lineTo(x + w, y + h * 0.48)
     .quadraticCurveTo(x + w * 0.88, y + h * 0.35, x + w * 0.72, y + h * 0.12)
     .quadraticCurveTo(x + w * 0.62, y + h * 0.03, x + w * 0.52, y)
-    .fill(teal);
-
+    .fill(p);
 
   // Smaller accent stripe top-right
   doc.moveTo(x + w * 0.68, y)
     .lineTo(x + w, y)
     .lineTo(x + w, y + h * 0.22)
     .quadraticCurveTo(x + w * 0.9, y + h * 0.1, x + w * 0.68, y)
-    .fill(tealDark);
+    .fill(dk);
 
-
-  // Bottom-left teal shape
+  // ── Teal decorative shape bottom-left ──
   doc.moveTo(x, y + h * 0.72)
     .lineTo(x + w * 0.3, y + h)
     .lineTo(x, y + h)
     .closePath()
-    .fill(teal);
+    .fill(p);
 
-  // Bottom-left extra accent
+  // Small accent strip bottom-left
   doc.moveTo(x, y + h * 0.85)
     .lineTo(x + w * 0.18, y + h)
     .lineTo(x, y + h)
     .closePath()
-    .fill(tealDark);
-
+    .fill(dk);
   doc.restore();
 
-  // Watermark logo center
+  // Watermark
   wm(doc, x, y, w, h, d.logo);
 
   // ── Academic Year (top right, on teal) ──
@@ -388,18 +281,10 @@ function tStudentVBlue(doc, x, y, w, h, d) {
   doc.font('Helvetica-Bold').fontSize(sessionFs).fillColor('#000000')
     .text(d.session || '2025-2026', x + w * 0.63, y + h * 0.04 + 10, { width: w * 0.34, align: 'center', lineBreak: false });
 
-
-
-
-
-  // ── School Logo and Name top-left ──
+  // ── School logo & name top-left ──
   const logoSize = h * 0.22;
   const logoX = x + w * 0.025, logoY = y + h * 0.02;
-  if (d.logo) {
-    drawLogo(doc, logoX, logoY, logoSize, d.logo);
-  } else {
-    doc.rect(logoX, logoY, logoSize, logoSize).fill('#e0e0e0');
-  }
+  if (d.logo) drawLogo(doc, logoX, logoY, logoSize, d.logo);
   const sName = titleCase(d.schoolName || 'School Name');
   const snW = w * 0.45;
   const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 7.5, 5.5);
@@ -409,32 +294,30 @@ function tStudentVBlue(doc, x, y, w, h, d) {
   doc.font('Helvetica').fontSize(5.5).fillColor('#666666')
     .text(d.schoolAddress || 'School Address, City', logoX + logoSize + 4, snY + snFs + 1, { width: snW, align: 'left', lineBreak: false });
 
-
-  // ── Circular photo left-center ──
-  const photoR = h * 0.27;
-  const photoCX = x + w * 0.22, photoCY = y + h * 0.5;
-  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, teal, 2.5);
-
-  // ── STUDENT ID CARD pill badge ──
+  // ── "STUDENT ID CARD" pill badge ──
   const badgeW = w * 0.42, badgeH = h * 0.1;
   const badgeX = x + w * 0.45, badgeY = y + h * 0.22;
-  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(teal);
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(p);
   doc.font('Helvetica-Bold').fillColor('#ffffff');
   const badgeFs = fitText(doc, 'STUDENT ID CARD', badgeW - 10, 'Helvetica-Bold', 8);
   doc.fontSize(badgeFs).text('STUDENT ID CARD', badgeX, badgeY + badgeH * 0.25, { width: badgeW, align: 'center', lineBreak: false });
 
+  // ── Circular photo left ──
+  const photoR = h * 0.20; // Reduced size as requested
+  const photoCX = x + w * 0.22, photoCY = y + h * 0.5;
+  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, p, 2.5);
 
-  // ── Student Name ──
+  // ── Student name ──
   const nameX = x + w * 0.45, nameY = badgeY + badgeH + h * 0.04;
   const nameW = w * 0.51;
-  const nameFs = fitText(doc, (d.name || '').toUpperCase(), nameW, 'Helvetica-Bold', 11, 7);
-  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(teal)
-    .text((d.name || 'STUDENT NAME').toUpperCase(), nameX, nameY, { width: nameW, align: 'left', lineBreak: false });
+  const sNameCap = titleCase(d.name || 'Student Name');
+  const nameFs = fitText(doc, sNameCap, nameW, 'Helvetica-Bold', 9, 7);
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(p)
+    .text(sNameCap, nameX, nameY, { width: nameW, align: 'left', lineBreak: false });
 
-  // ── Fields: Name, Roll No, ID, Class ──
+  // ── Fields right of photo ──
   const fieldsX = x + w * 0.45;
   const valX = x + w * 0.62;
-  const fieldW = w * 0.51;
   const valW = x + w * 0.97 - valX;
   const fieldFs = 7;
   const lineH = h * 0.1;
@@ -445,39 +328,46 @@ function tStudentVBlue(doc, x, y, w, h, d) {
     ['Roll No', d.roll || 'N/A'],
     ['Class', d.class || 'N/A'],
   ];
+
   fields.forEach(([lbl, val]) => {
     drawFieldRow(doc, lbl, val, fieldsX, valX, fy, fieldFs, '#444444', '#111111', valW);
     fy += lineH;
   });
 
-  // ── QR Code bottom-center ──
-  const qrSize2 = h * 0.18;
+  // ── QR code bottom-center ──
+  const qrSize = h * 0.18;
   const qrX = x + w * 0.38, qrY = y + h * 0.78;
-  drawQR(doc, qrX, qrY, qrSize2, teal);
+  drawQR(doc, qrX, qrY, qrSize, p);
 
-
-
-  // ── Card Expires bottom-left (on teal) ──
+  // ── Card Expires bottom-left ──
   doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#000000')
     .text('Card Expires', x + 4, y + h * 0.83, { lineBreak: false });
   const expYear = new Date().getFullYear() + 3;
   doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#000000')
-    .text(`DEC ${expYear}`, x + 4, y + h * 0.83 + 9, { lineBreak: false });
+    .text(`Dec ${expYear}`, x + 4, y + h * 0.83 + 9, { lineBreak: false });
 
-
-  // ── Principal Signature bottom-right ──
+  // ── Principal signature bottom-right ──
   const sigW = w * 0.28;
-  const sigX = x + w * 0.68, sigY = y + h * 0.84; // Lowered
+  const sigX = x + w * 0.68, sigY = y + h * 0.85;
   drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
+}
 
+// ── TEMPLATE 1: Student Vertical — PROFESSIONAL ───────────────────────────────
+function tStudentVBlue(doc, x, y, w, h, d) {
+  const p = resolveColor(d.primaryColor, '#1a9e8f');
+  const dk = darken(p, 0.25);
+  const lt = lighten(p, 0.85);
+
+  // Sync with tStudentTeal logic as it represents the new standard
+  tStudentTeal(doc, x, y, w, h, d);
 }
 
 // ── TEMPLATE 2: Student Navy-Gold Horizontal (Image 2) ───────────────────────
 // Dark navy bg, gold right accent stripe, circular photo left, logo+fields right,
 // name at bottom-left, "Authorized by Registrar" badge bottom-right
 function tStudentNavy(doc, x, y, w, h, d) {
-  const navy = resolveColor(d.primaryColor, '#1a2e4a'); 
-  const teal = navy;
+  let navy = '#1a2e4a';
+
   const navyDark = darken(navy, 0.25);
   const navyLight = lighten(navy, 0.6);
 
@@ -499,7 +389,7 @@ function tStudentNavy(doc, x, y, w, h, d) {
   // ── Date of Issue top-right (on navy, before gold stripe) ──
   doc.font('Helvetica-Bold').fontSize(7).fillColor('#cccccc')
     .text('Date Of Issue', x + w * 0.55, y + h * 0.06, { width: w * 0.36, align: 'right', lineBreak: false });
-  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const now = new Date();
   const dStr = `${String(now.getDate()).padStart(2, '0')} ${months[now.getMonth()]} ${now.getFullYear()}`;
   doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#aaaaaa')
@@ -528,9 +418,10 @@ function tStudentNavy(doc, x, y, w, h, d) {
 
   // ── Student Name center-right (was logo) ──
   const nameW2 = w * 0.4;
-  const nameFs2 = fitText(doc, (d.name || '').toUpperCase(), nameW2, 'Helvetica-Bold', 11, 7);
+  const sNameCap2 = titleCase(d.name || 'Student Name');
+  const nameFs2 = fitText(doc, sNameCap2, nameW2, 'Helvetica-Bold', 11, 7);
   doc.font('Helvetica-Bold').fontSize(nameFs2).fillColor(gold)
-    .text((d.name || 'STUDENT NAME').toUpperCase(), x + w * 0.43, y + h * 0.1, { width: nameW2, align: 'left', lineBreak: false });
+    .text(sNameCap2, x + w * 0.43, y + h * 0.1, { width: nameW2, align: 'left', lineBreak: false });
 
   // ── Fields right of photo ──
   const fieldsX = x + w * 0.43;
@@ -542,7 +433,7 @@ function tStudentNavy(doc, x, y, w, h, d) {
   let fy = y + h * 0.34;
 
   const fields = [
-    ['ID', d.studentId || d.roll || 'N/A'],
+    ['Id', d.studentId || d.roll || 'N/A'],
     ['Roll No', d.roll || 'N/A'],
     ['Class', d.class || 'N/A'],
     ['Session', d.session || 'N/A'],
@@ -568,7 +459,7 @@ function tStudentNavy(doc, x, y, w, h, d) {
 
   // ── Principal Signature bottom-right ──
   const sigW = w * 0.25;
-  const sigX = x + w * 0.58, sigY = y + h * 0.85; // Lowered
+  const sigX = x + w * 0.58, sigY = y + h * 0.82; // Lowered
   drawSignature(doc, d.principalName, sigX, sigY, sigW, '#cccccc');
 
 
@@ -624,9 +515,10 @@ function tTeacherCream(doc, x, y, w, h, d) {
   const infoX = x + w * 0.31;
   const infoW = w * 0.65;
   const tnameY = y + headerH + h * 0.06;
-  const tnameFs = fitText(doc, d.name || 'TEACHER NAME', infoW, 'Helvetica-Bold', 10.5, 7);
+  const sNameCapT = titleCase(d.name || 'Teacher Name');
+  const tnameFs = fitText(doc, sNameCapT, infoW, 'Helvetica-Bold', 10.5, 7);
   doc.font('Helvetica-Bold').fontSize(tnameFs).fillColor(navy)
-    .text(d.name || 'TEACHER NAME', infoX, tnameY, { width: infoW, lineBreak: false });
+    .text(sNameCapT, infoX, tnameY, { width: infoW, lineBreak: false });
 
 
   // Divider
@@ -1101,9 +993,10 @@ function tPositionHolderGreen(doc, x, y, w, h, d) {
 
   // ── Name and Selection below ──
   const nameY = hexCY + hexR + h * 0.06;
-  const nameFs = fitText(doc, (d.name || 'NAME HERE').toUpperCase(), w - 10, 'Helvetica-Bold', 10, 7);
+  const sNameCapPH = titleCase(d.name || 'Name Here');
+  const nameFs = fitText(doc, sNameCapPH, w - 10, 'Helvetica-Bold', 10, 7);
   doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(green)
-    .text((d.name || 'NAME HERE').toUpperCase(), x + 5, nameY, { width: w - 10, align: 'center', lineBreak: false });
+    .text(sNameCapPH, x + 5, nameY, { width: w - 10, align: 'center', lineBreak: false });
 
   // HEAD BOY / HEAD GIRL based on selection
   const posText = (d.position || 'Head Boy').toUpperCase();
@@ -1142,7 +1035,7 @@ function tPositionHolderGreen(doc, x, y, w, h, d) {
 
   // ── Signature bottom right ──
   const sigW = w * 0.42;
-  drawSignature(doc, d.principalName, x + w * 0.52, y + h - h * 0.08, sigW, '#333333');
+  drawSignature(doc, d.principalName, x + w * 0.52, y + h - h * 0.06, sigW, '#333333');
 }
 
 
@@ -1259,6 +1152,7 @@ function drawTemplate(doc, x, y, w, h, tpl, d) {
   const map = {
 
     'student-teal-horizontal': tStudentTeal,
+    'student-v-blue': tStudentTeal, // New design variant
     'student-navy-horizontal': tStudentNavy,
     'teacher-cream-horizontal': tTeacherCream,
     'security-red-vertical': tSecurityRed,
@@ -1278,15 +1172,33 @@ function drawTemplate(doc, x, y, w, h, tpl, d) {
 export const getClassesForIDCard = async (req, res) => {
   try {
     const { schoolId } = req;
-    const Class = await getModel(schoolId, 'classes');
-    const Student = await getModel(schoolId, 'students');
-    const classes = await Class.find({ isActive: true }).select('className section academicYear').lean();
+    let Class, Student;
+
+    // Try Tenant DB first
+    Class = await getModel(schoolId, 'classes');
+    Student = await getModel(schoolId, 'students');
+    let classes = await Class.find({ isActive: { $ne: false } }).select('className section academicYear grade').lean();
+
+    // Fallback to Main DB if Tenant DB has no classes
+    if (classes.length === 0) {
+      console.log('[IDCard] No classes in tenant DB, falling back to main DB');
+      classes = await MainClass.find({ schoolId, isActive: { $ne: false } }).select('className section academicYear grade').lean();
+      // If we fall back to Main DB for classes, we should use Main DB for student counts too
+      Student = MainStudent;
+    }
+
     const classesWithCount = await Promise.all(classes.map(async (cls) => {
-      const studentCount = await Student.countDocuments({ classId: cls._id, isActive: true, status: 'active' });
+      const studentCount = await Student.countDocuments({
+        classId: cls._id,
+        status: { $ne: 'inactive' },
+        ...(Student === MainStudent ? { schoolId } : {})
+      });
       return { ...cls, studentCount };
     }));
+
     res.status(200).json({ success: true, data: classesWithCount });
   } catch (error) {
+    console.error('Error fetching classes for ID card:', error);
     res.status(500).json({ success: false, message: 'Server error fetching classes' });
   }
 };
@@ -1295,58 +1207,108 @@ export const getStaffForIDCard = async (req, res) => {
   try {
     const { schoolId } = req;
     const Staff = await getModel(schoolId, 'staffs');
-    const staff = await Staff.find({ status: 'active' }).select('name staffId role designation profilePicture contact').lean();
+
+    // Try Tenant DB
+    let staff = await Staff.find({ status: { $ne: 'inactive' } }).select('name staffId role designation profilePicture contact').lean();
+
+    // Fallback to Main DB (Teachers)
+    if (staff.length === 0) {
+      console.log('[IDCard] No staff in tenant DB, falling back to main DB (Teachers)');
+      const teachers = await MainTeacher.find({ schoolId, isActive: { $ne: false } })
+        .select('fullName employeeId gender designation profilePicture phone')
+        .lean();
+
+      staff = teachers.map(t => ({
+        _id: t._id,
+        name: t.fullName,
+        staffId: t.employeeId,
+        role: 'teacher',
+        designation: 'Teacher',
+        profilePicture: t.profilePicture,
+        contact: t.phone
+      }));
+    }
+
     res.status(200).json({ success: true, data: staff });
   } catch (error) {
+    console.error('Error fetching staff for ID card:', error);
     res.status(500).json({ success: false, message: 'Server error fetching staff' });
   }
 };
 
 async function getPersonData(req, schoolId, role, classId, personId, rollNumber, staffType) {
-  const Student = await getModel(schoolId, 'students');
-  const Staff = await getModel(schoolId, 'staffs');
-  const Class = await getModel(schoolId, 'classes');
-  let p, c = null;
   const isStudentRole = ['student', 'position_holder', 'class_monitor'].includes(role);
-  if (isStudentRole) {
-    if (personId) { p = await Student.findById(personId).lean(); }
-    else if (['position_holder', 'class_monitor'].includes(role) && rollNumber) {
-      const q = { rollNumber: String(rollNumber).trim(), isActive: true, status: 'active' };
-      if (classId) q.classId = classId;
-      p = await Student.findOne(q).lean();
-    } else {
-      const q = { isActive: true, status: 'active' };
-      if (classId) q.classId = classId;
-      p = await Student.findOne(q).sort({ rollNumber: 1 }).lean();
-    }
-    if (p && p.classId) c = await Class.findById(p.classId).lean();
-  } else {
-    if (personId) {
-      p = await Staff.findById(personId).lean();
-    } else {
-      const q = { status: 'active' };
-      if (role === 'security') q.designation = 'Security Guard';
-      else if (role === 'teacher') q.role = 'teacher';
-      else if (role === 'staff' && staffType) q.designation = staffType;
-      p = await Staff.findOne(q).lean();
-      if (!p && role === 'security') p = { name: '', staffId: '', designation: 'Security Guard', contact: '', profilePicture: null };
-    }
-    // Fetch class if staff is a teacher
-    if (p && role === 'teacher') {
-      // 1. Check if they are a primary Class Teacher
-      c = await Class.findOne({ classTeacher: p._id, isActive: true }).lean();
+  let p = null, c = null;
 
-      // 2. Fallback: Check their assignedClasses array
-      if (!c && p.assignedClasses && p.assignedClasses.length > 0) {
-        const firstAssigned = p.assignedClasses[0];
-        const classId = firstAssigned.classId || (typeof firstAssigned === 'object' ? firstAssigned._id : firstAssigned);
-        if (classId) {
-          c = await Class.findById(classId).lean();
+  try {
+    // 1. Try Tenant Models
+    const Student = await getModel(schoolId, 'students');
+    const Staff = await getModel(schoolId, 'staffs');
+    const Class = await getModel(schoolId, 'classes');
+
+    if (isStudentRole) {
+      if (personId) { p = await Student.findById(personId).lean(); }
+      else if (['position_holder', 'class_monitor'].includes(role) && rollNumber) {
+        const q = { rollNumber: String(rollNumber).trim(), status: { $ne: 'inactive' } };
+        if (classId) q.classId = classId;
+        p = await Student.findOne(q).lean();
+      } else {
+        const q = { status: { $ne: 'inactive' } };
+        if (classId) q.classId = classId;
+        p = await Student.findOne(q).sort({ rollNumber: 1 }).lean();
+      }
+      if (p && p.classId) c = await Class.findById(p.classId).lean();
+    } else {
+      if (personId) { p = await Staff.findById(personId).lean(); }
+      else {
+        const q = { status: { $ne: 'inactive' } };
+        if (role === 'security') q.designation = 'Security Guard';
+        else if (role === 'teacher') q.role = 'teacher';
+        else if (role === 'staff' && staffType) q.designation = staffType;
+        p = await Staff.findOne(q).lean();
+      }
+      if (p && role === 'teacher') {
+        c = await Class.findOne({ classTeacher: p._id, isActive: { $ne: false } }).lean();
+        if (!c && p.assignedClasses && p.assignedClasses.length > 0) {
+          const firstAssigned = p.assignedClasses[0];
+          const cId = firstAssigned.classId || firstAssigned._id || firstAssigned;
+          if (cId) c = await Class.findById(cId).lean();
         }
       }
     }
-  }
 
+    // 2. Fallback to Main Models if nothing found in tenant DB
+    if (!p) {
+      console.log('[IDCard] No person in tenant DB, trying main DB fallback');
+      if (isStudentRole) {
+        if (personId) { p = await MainStudent.findOne({ _id: personId, schoolId }).lean(); }
+        else {
+          const q = { schoolId, isActive: { $ne: false } };
+          if (classId) q.classId = classId;
+          p = await MainStudent.findOne(q).sort({ rollNumber: 1 }).lean();
+        }
+        if (p && p.classId) c = await MainClass.findOne({ _id: p.classId, schoolId }).lean();
+      } else {
+        if (personId) { p = await MainTeacher.findOne({ _id: personId, schoolId }).lean(); }
+        else {
+          const q = { schoolId, isActive: { $ne: false } };
+          p = await MainTeacher.findOne(q).lean();
+        }
+        if (p) {
+          // Normalize MainTeacher to match buildData expectations
+          p.name = p.fullName;
+          p.staffId = p.employeeId;
+          p.contact = p.phone;
+
+          if (role === 'teacher') {
+            c = await MainClass.findOne({ classTeacher: p._id.toString(), schoolId }).lean();
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[IDCard] getPersonData error:', err.message);
+  }
 
   return { p, c };
 }
@@ -1388,17 +1350,20 @@ export const previewIDCard = async (req, res) => {
     const { schoolId } = req;
     const { role = 'student', classId, templateName, personId, rollNumber, staffType, cardWidth, cardHeight, primaryColor, position, principalName } = req.body;
 
+    console.log('Generating preview for:', { role, templateName, personId });
+
     const school = await School.findById(schoolId).lean();
     let { p, c } = await getPersonData(req, schoolId, role, classId, personId, rollNumber, staffType);
 
     if (!p) {
+      console.log('No person found, using sample data');
       p = {
-        name: 'Name', fullName: 'Name', rollNumber: '0000', studentId: 'ST-0000',
-        staffId: 'EMP-0000', designation: staffType || (role === 'teacher' ? 'Teacher' : role === 'security' ? 'Security Guard' : 'Staff'),
-        contact: '000-0000000', phone: '000-0000000', profilePicture: null,
+        name: 'Sample Name', fullName: 'Sample Name', rollNumber: '20', studentId: '20',
+        staffId: 'EMP-001', designation: staffType || (role === 'teacher' ? 'Teacher' : role === 'security' ? 'Security Guard' : 'Staff'),
+        contact: '03445686543', phone: '03445686543', profilePicture: null,
         bloodGroup: 'B+', gender: 'Male', fatherName: 'Father Name', address: 'School Address'
       };
-      c = { className: 'Class X', section: 'A' };
+      c = { className: 'class9', section: 'A', academicYear: '2026-2027' };
     }
 
     const [logoBuffer, profileBuffer] = await Promise.all([
@@ -1421,7 +1386,10 @@ export const previewIDCard = async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     doc.pipe(res);
 
-    drawTemplate(doc, 0, 0, w, h, templateName, buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position, principalName));
+    // Use buildData to normalize the fields
+    const data = buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position, principalName);
+
+    drawTemplate(doc, 0, 0, w, h, templateName, data);
     doc.end();
 
   } catch (error) {
