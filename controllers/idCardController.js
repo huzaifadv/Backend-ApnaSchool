@@ -222,114 +222,131 @@ function drawFieldRow(doc, label, value, lx, vx, y, maxFs, lColor, vColor, avail
     .text(valStr, vx, y, { lineBreak: false });
 }
 
-// ── TEMPLATE 1: Student Teal Horizontal (Image 1) ─────────────────────────────
-// White bg, teal decorative shapes top-right & bottom-left, circular photo left,
-// info right, "STUDENT ID CARD" pill badge, principal signature bottom-right
+// ── TEMPLATE 1: Student Teal Horizontal (Original Style — Polished) ───────────
+// Same design language as original: white bg, teal corner shapes, circular photo,
+// pill badge — but tighter, smaller, properly aligned for a professional real card
 function tStudentTeal(doc, x, y, w, h, d) {
-  const teal = resolveColor(d.primaryColor, '#1a9e8f');
-  const tealDark = darken(teal, 0.25);
-  const tealLight = lighten(teal, 0.85);
+  const teal      = resolveColor(d.primaryColor, '#1a9e8f');
+  const tealDark  = darken(teal, 0.26);
+  const tealDeep  = darken(teal, 0.40);
+  const tealLight = lighten(teal, 0.82);
 
-  // White background
+  // ── White background ──
   doc.rect(x, y, w, h).fill('#ffffff');
 
-  // ── Teal decorative shape top-right ──
+  // ── Decorative shapes (clipped to card) ──
   doc.save();
   doc.rect(x, y, w, h).clip();
-  doc.moveTo(x + w * 0.58, y)
-    .lineTo(x + w, y)
-    .lineTo(x + w, y + h * 0.55)
-    .quadraticCurveTo(x + w * 0.82, y + h * 0.38, x + w * 0.68, y + h * 0.12)
-    .quadraticCurveTo(x + w * 0.63, y + h * 0.04, x + w * 0.58, y)
-    .fill(teal);
 
-  // ── Teal decorative shape bottom-left ──
-  doc.moveTo(x, y + h * 0.62)
-    .lineTo(x + w * 0.32, y + h)
-    .lineTo(x, y + h)
-    .fill(teal);
+  // Top-right shape — anchored precisely to top & right card edges
+  doc.moveTo(x + w * 0.555, y)
+     .lineTo(x + w,          y)
+     .lineTo(x + w,          y + h * 0.545)
+     .quadraticCurveTo(x + w * 0.832, y + h * 0.352, x + w * 0.698, y + h * 0.158)
+     .quadraticCurveTo(x + w * 0.614, y + h * 0.048, x + w * 0.555, y)
+     .fill(teal);
 
-  // Small accent strip bottom-left
-  doc.moveTo(x, y + h * 0.75)
-    .lineTo(x + w * 0.18, y + h)
-    .lineTo(x, y + h)
-    .fill(tealDark);
+  // Bottom-left triangle — anchored to bottom & left card edges
+  doc.moveTo(x,             y + h * 0.635)
+     .lineTo(x + w * 0.285, y + h)
+     .lineTo(x,             y + h)
+     .fill(teal);
+
+  // Small dark-teal accent at bottom-left corner
+  doc.moveTo(x,             y + h * 0.775)
+     .lineTo(x + w * 0.138, y + h)
+     .lineTo(x,             y + h)
+     .fill(tealDark);
+
   doc.restore();
 
-  // Watermark
+  // ── Watermark ──
   wm(doc, x, y, w, h, d.logo);
 
-  // ── School logo & name top-left ──
-  const logoSize = h * 0.15;
-  const logoX = x + w * 0.03, logoY = y + h * 0.05;
-  if (d.logo) drawLogo(doc, logoX, logoY, logoSize, d.logo);
+  // ── School logo (top-left) ──
+  const logoSz = h * 0.13;
+  const logoX  = x + w * 0.03;
+  const logoY  = y + h * 0.05;
+  if (d.logo) drawLogo(doc, logoX, logoY, logoSz, d.logo);
+
+  // School name + address (smaller, tighter)
+  const snX   = logoX + logoSz + 3;
+  const snW   = w * 0.27;
   const sName = titleCase(d.schoolName || 'School Name');
-  const snW = w * 0.38;
-  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 8, 5.5);
+  const snFs  = fitText(doc, sName, snW, 'Helvetica-Bold', 7, 5);
   doc.font('Helvetica-Bold').fontSize(snFs).fillColor(tealDark)
-    .text(sName, logoX + logoSize + 4, logoY + 1, { width: snW, align: 'left', lineBreak: false });
-  doc.font('Helvetica').fontSize(5).fillColor('#666666')
-    .text(d.schoolAddress || '', logoX + logoSize + 4, logoY + snFs + 2, { width: snW, align: 'left', lineBreak: false });
+     .text(sName, snX, logoY + 1, { width: snW, align: 'left', lineBreak: false });
+  if (d.schoolAddress) {
+    doc.font('Helvetica').fontSize(4.5).fillColor('#777777')
+       .text(d.schoolAddress, snX, logoY + snFs + 1.5, { width: snW, align: 'left', lineBreak: false });
+  }
 
-  // ── "STUDENT ID CARD" pill badge ──
-  const badgeW = w * 0.36, badgeH = h * 0.1;
-  const badgeX = x + w * 0.32, badgeY = y + h * 0.04;
-  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(teal);
-  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#ffffff')
-    .text('STUDENT ID CARD', badgeX, badgeY + badgeH * 0.28, { width: badgeW, align: 'center', lineBreak: false });
+  // ── "STUDENT ID CARD" pill badge — top-right inside teal shape ──
+  const badgeW = w * 0.300;
+  const badgeH = h * 0.088;
+  const badgeX = x + w * 0.572;
+  const badgeY = y + h * 0.038;
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(tealDeep);
+  // Thin white inner ring — stays visible over the teal background shape
+  doc.roundedRect(badgeX + 0.8, badgeY + 0.8, badgeW - 1.6, badgeH - 1.6, (badgeH - 1.6) / 2)
+     .lineWidth(0.6).strokeColor('#ffffff').stroke();
+  doc.font('Helvetica-Bold').fontSize(6.2).fillColor('#ffffff')
+     .text('STUDENT ID CARD', badgeX, badgeY + badgeH * 0.27, { width: badgeW, align: 'center', lineBreak: false });
 
-  // ── Circular photo left ──
-  const photoR = h * 0.23;
-  const photoCX = x + w * 0.18, photoCY = y + h * 0.52;
-  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, teal, 2.5);
+  // ── Circular photo — vertically centered with text block ──
+  const photoR  = h * 0.190;
+  const photoCX = x + w * 0.172;
+  const photoCY = y + h * 0.499;
+  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, teal, 1.8);
 
-  // ── Student name ──
-  const nameW = w * 0.48;
-  const nameFs = fitText(doc, (d.name || '').toUpperCase(), nameW, 'Helvetica-Bold', 11, 7);
+  // ── Student name — shifted left, with top breathing room ──
+  const nameX  = x + w * 0.360;
+  const nameW  = w * 0.475;
+  const nameStr = titleCase(d.name || 'Student Name');
+  const nameFs  = fitText(doc, nameStr, nameW, 'Helvetica-Bold', 9.5, 6.5);
   doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(tealDark)
-    .text((d.name || 'STUDENT NAME').toUpperCase(), x + w * 0.4, y + h * 0.2, { width: nameW, align: 'left', lineBreak: false });
+     .text(nameStr, nameX, y + h * 0.220, { width: nameW, align: 'left', lineBreak: false });
 
-  // ── Thin teal divider under name ──
-  doc.rect(x + w * 0.4, y + h * 0.32, w * 0.46, 1).fill(tealLight);
+  // Thin divider under name
+  doc.moveTo(nameX, y + h * 0.334)
+     .lineTo(nameX + nameW, y + h * 0.334)
+     .lineWidth(0.7).strokeColor(tealLight).stroke();
 
-  // ── Fields right of photo ──
-  const fieldsX = x + w * 0.4;
-  const colonX = x + w * 0.58;
-  const valX = x + w * 0.605;
-  const valW = x + w * 0.9 - valX;
-  const fieldFs = 7.5;
-  const lineH = h * 0.115;
-  let fy = y + h * 0.36;
+  // ── Info fields (compact) ──
+  const fX     = nameX;
+  const colonX = nameX + w * 0.178;
+  const valX   = colonX + 5;
+  const valW   = x + w * 0.915 - valX;
+  const fFs    = 6.8;
+  const lineH  = h * 0.104;
+  let   fy     = y + h * 0.362;
 
-  const fields = [
+  [
     ['Student ID', d.studentId || 'N/A'],
-    ['Roll No',   d.roll      || 'N/A'],
-    ['Class',     d.class     || 'N/A'],
-    ['Session',   d.session   || 'N/A'],
-  ];
-
-  fields.forEach(([lbl, val]) => {
-    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
-      .text(lbl, fieldsX, fy, { lineBreak: false });
-    doc.font('Helvetica').fontSize(fieldFs).fillColor('#555555')
-      .text(':', colonX, fy, { lineBreak: false });
-    const vFs = fitText(doc, String(val), valW, 'Helvetica-Bold', fieldFs);
+    ['Roll No',    d.roll      || 'N/A'],
+    ['Class',      d.class     || 'N/A'],
+    ['Session',    d.session   || 'N/A'],
+  ].forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fFs).fillColor('#555555')
+       .text(lbl, fX, fy, { lineBreak: false });
+    doc.font('Helvetica').fontSize(fFs).fillColor('#999999')
+       .text(':', colonX, fy, { lineBreak: false });
+    const vFs = fitText(doc, String(val), valW, 'Helvetica-Bold', fFs, 5);
     doc.font('Helvetica-Bold').fontSize(vFs).fillColor('#111111')
-      .text(String(val), valX, fy, { lineBreak: false });
+       .text(String(val), valX, fy, { lineBreak: false });
     fy += lineH;
   });
 
-  // ── QR code bottom-left ──
-  const qrSize = h * 0.19;
-  drawQR(doc, x + w * 0.03, y + h * 0.78, qrSize, tealDark);
+  // ── QR code (inside bottom-left teal shape) ──
+  const qrSz = h * 0.163;
+  drawQR(doc, x + w * 0.028, y + h * 0.805, qrSz, '#000000');
 
-  // ── Contact bottom-center ──
-  doc.font('Helvetica').fontSize(5).fillColor('#777777')
-    .text(d.contact || '', x + w * 0.22, y + h * 0.9, { width: w * 0.42, align: 'center', lineBreak: false });
+  // ── Contact (bottom-center) ──
+  doc.font('Helvetica').fontSize(5.5).fillColor('#555555')
+     .text(d.contact || '', x + w * 0.215, y + h * 0.915, { width: w * 0.41, align: 'center', lineBreak: false });
 
-  // ── Principal signature bottom-right ──
-  const sigW = w * 0.26;
-  drawSignature(doc, d.principalName, x + w * 0.68, y + h * 0.87, sigW, tealDark);
+  // ── Principal signature (bottom-right) ──
+  drawSignature(doc, d.principalName, x + w * 0.695, y + h * 0.872, w * 0.25, tealDark);
 }
 
 // ── TEMPLATE 1: Student Vertical — PROFESSIONAL ───────────────────────────────

@@ -79,11 +79,11 @@ export const generatePaper = async (req, res) => {
     doc.fontSize(12).font('Helvetica-Bold').text(basket.examTitle, { align: 'center' });
     doc.moveDown(0.5);
 
-    const subText = `Subject: ${subjectName} | Class: ${classDoc ? classDoc.className : 'N/A'} | Session: ${sessionYear}`;
-    const dateText = `Date: ${new Date().toLocaleDateString()} | Time: ${basket.timeAllowed} | Total Marks: ${basket.totalMarks}`;
-    
-    doc.fontSize(10).font('Helvetica').text(subText, { align: 'center' });
-    doc.text(dateText, { align: 'center' });
+    const row1 = `Student Name: ________________________     Subject: ${subjectName}     Date: ${new Date().toLocaleDateString()}`;
+    const row2 = `Class: ${classDoc ? classDoc.className : 'N/A'}     Time: ${basket.timeAllowed}     Total Marks: ${basket.totalMarks}`;
+
+    doc.fontSize(10).font('Helvetica').text(row1, { align: 'center' });
+    doc.text(row2, { align: 'center' });
     doc.moveDown(0.5);
     doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
     doc.moveDown(1);

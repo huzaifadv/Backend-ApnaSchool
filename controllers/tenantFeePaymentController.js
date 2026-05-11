@@ -1297,8 +1297,12 @@ export const getFeeAnalytics = async (req, res, next) => {
     const totalMonthlyFees = allStudents.reduce((s, st) => s + (st.totalMonthlyFee || st.monthlyFee || 0), 0);
 
     const totalCollected = validPayments.reduce((s, p) => s + (p.amountPaid || 0), 0);
-    // Recalculate pending from (amount - amountPaid) to avoid stale remainingAmount values
-    const totalPending   = validPayments.reduce((s, p) => s + Math.max(0, (p.amount || 0) - (p.amountPaid || 0)), 0);
+    // Recalculate pending base fee only (excluding extra charges)
+    const totalPending = validPayments.reduce((s, p) => {
+      const extraTotal = (p.extraCharges || []).reduce((sum, c) => sum + (c.amount || 0), 0);
+      const baseAmount = Math.max(0, (p.amount || 0) - extraTotal);
+      return s + Math.max(0, baseAmount - (p.amountPaid || 0));
+    }, 0);
     const totalStudents  = allStudents.length;
     const paidCount      = validPayments.filter(p => p.status === 'Paid').length;
     const partialCount   = validPayments.filter(p => p.status === 'Partial').length;
@@ -1323,7 +1327,11 @@ export const getFeeAnalytics = async (req, res, next) => {
         month: m,
         year: y,
         collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
-        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, (p.amount || 0) - (p.amountPaid || 0)), 0)),
+        pending:   Math.round(recs.reduce((s, p) => {
+          const extraTotal = (p.extraCharges || []).reduce((sum, c) => sum + (c.amount || 0), 0);
+          const baseAmount = Math.max(0, (p.amount || 0) - extraTotal);
+          return s + Math.max(0, baseAmount - (p.amountPaid || 0));
+        }, 0)),
         count:     recs.length,
       });
     }
@@ -1332,13 +1340,26 @@ export const getFeeAnalytics = async (req, res, next) => {
     const classes = await Class.find({}).select('className section').lean();
     const classSummary = await Promise.all(classes.map(async (cls) => {
       const studs    = await Student.find({ classId: cls._id }).select('_id').lean();
-      const clsIdStr = cls._id.toString();
-      // Use classId on the payment record directly, only for active students
-      const recs = validPayments.filter(p => p.classId && p.classId.toString() === clsIdStr);
+      const studentIds = new Set(studs.map(s => s._id.toString()));
+      // Filter payments belonging to students currently in this class
+      const recs = validPayments.filter(p => p.studentId && studentIds.has(p.studentId.toString()));
+
+      const extraChargesRecs = recs.flatMap(p => p.extraCharges || []);
+      const additionalCharges = extraChargesRecs.reduce((s, c) => s + (c.amount || 0), 0);
+      
+      const pendingBaseFees = recs.reduce((s, p) => {
+        const extraTotal = (p.extraCharges || []).reduce((sum, c) => sum + (c.amount || 0), 0);
+        // Base fee is total amount minus extra charges
+        const baseAmount = Math.max(0, (p.amount || 0) - extraTotal);
+        // Assuming amountPaid goes to baseAmount first
+        return s + Math.max(0, baseAmount - (p.amountPaid || 0));
+      }, 0);
+
       return {
         className: `${cls.className}-${cls.section}`,
         collected: Math.round(recs.reduce((s, p) => s + (p.amountPaid || 0), 0)),
-        pending:   Math.round(recs.reduce((s, p) => s + Math.max(0, (p.amount || 0) - (p.amountPaid || 0)), 0)),
+        pending:   Math.round(pendingBaseFees),
+        additionalCharges: Math.round(additionalCharges),
         students:  studs.length,
       };
     }));

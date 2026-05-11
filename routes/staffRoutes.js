@@ -31,7 +31,8 @@ import {
   getPendingAttendance,
   verifyStaffAttendance,
   getAllStaffMarks,
-  getAllStaffMonthlyReports
+  getAllStaffMonthlyReports,
+  getStaffAttendance
 } from '../controllers/staffController.js';
 
 const router = express.Router();
@@ -151,6 +152,9 @@ router.put('/:id/salary/:salaryId', updateSalaryRecord);
 router.delete('/:id/salary/:salaryId', deleteSalaryRecord);
 router.put('/:id/salary/:salaryId/toggle-status', toggleSalaryStatus);
 router.post('/:id/salary/:salaryId/invoice', createSalaryInvoice);
+
+// Attendance records (for staff profile)
+router.get('/:id/attendance', getStaffAttendance);
 
 // Self-attendance verification
 // NOTE: these routes must come BEFORE /:id routes to avoid param collision
