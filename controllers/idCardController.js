@@ -75,15 +75,19 @@ function wm(doc, x, y, w, h, logo) {
 }
 
 function drawCircularPhoto(doc, buf, cx, cy, r, borderColor, borderWidth) {
+  const bw = borderWidth || 2;
   doc.save();
-  doc.circle(cx, cy, r + (borderWidth || 2)).lineWidth(borderWidth || 2).strokeColor(borderColor || '#ffffff').stroke();
+  // Border ring
+  doc.circle(cx, cy, r + bw).lineWidth(bw).strokeColor(borderColor || '#ffffff').stroke();
+  // Clip to exact circle — rect clip first so Chrome PDF viewer shows no oversized bounding box
+  doc.rect(cx - r, cy - r, r * 2, r * 2).clip();
   doc.circle(cx, cy, r).clip();
   doc.circle(cx, cy, r).fill('#e0e0e0');
   if (!buf) {
     doc.circle(cx, cy - r * 0.15, r * 0.32).fill('#b5b5b5');
     doc.ellipse(cx, cy + r * 0.55, r * 0.45, r * 0.32).fill('#b5b5b5');
   } else {
-    try { doc.image(buf, cx - r, cy - r, { width: r * 2, height: r * 2, cover: [r * 2, r * 2], align: 'center', valign: 'center' }); } catch { }
+    try { doc.image(buf, cx - r, cy - r, { width: r * 2, height: r * 2 }); } catch { }
   }
   doc.restore();
 }
@@ -228,8 +232,6 @@ function drawFieldRow(doc, label, value, lx, vx, y, maxFs, lColor, vColor, avail
 function tStudentTeal(doc, x, y, w, h, d) {
   const teal      = resolveColor(d.primaryColor, '#1a9e8f');
   const tealDark  = darken(teal, 0.26);
-  const tealDeep  = darken(teal, 0.40);
-  const tealLight = lighten(teal, 0.82);
 
   // ── White background ──
   doc.rect(x, y, w, h).fill('#ffffff');
@@ -238,23 +240,30 @@ function tStudentTeal(doc, x, y, w, h, d) {
   doc.save();
   doc.rect(x, y, w, h).clip();
 
-  // Top-right shape — anchored precisely to top & right card edges
-  doc.moveTo(x + w * 0.555, y)
+  // Top-right teal arc — SVG: M90 0 L170 0 L170 55 Q146 36 118 14 Q104 3 90 0 Z
+  doc.moveTo(x + w * 0.529, y)
      .lineTo(x + w,          y)
-     .lineTo(x + w,          y + h * 0.545)
-     .quadraticCurveTo(x + w * 0.832, y + h * 0.352, x + w * 0.698, y + h * 0.158)
-     .quadraticCurveTo(x + w * 0.614, y + h * 0.048, x + w * 0.555, y)
+     .lineTo(x + w,          y + h * 0.514)
+     .quadraticCurveTo(x + w * 0.859, y + h * 0.336, x + w * 0.694, y + h * 0.131)
+     .quadraticCurveTo(x + w * 0.612, y + h * 0.028, x + w * 0.529, y)
      .fill(teal);
 
-  // Bottom-left triangle — anchored to bottom & left card edges
-  doc.moveTo(x,             y + h * 0.635)
-     .lineTo(x + w * 0.285, y + h)
+  // Top-right dark teal accent — SVG: M122 0 L170 0 L170 25 Q150 10 122 0 Z
+  doc.moveTo(x + w * 0.718, y)
+     .lineTo(x + w,          y)
+     .lineTo(x + w,          y + h * 0.234)
+     .quadraticCurveTo(x + w * 0.882, y + h * 0.093, x + w * 0.718, y)
+     .fill(tealDark);
+
+  // Bottom-left teal triangle — SVG: M0 78 L54 107 L0 107 Z
+  doc.moveTo(x,             y + h * 0.729)
+     .lineTo(x + w * 0.318, y + h)
      .lineTo(x,             y + h)
      .fill(teal);
 
-  // Small dark-teal accent at bottom-left corner
-  doc.moveTo(x,             y + h * 0.775)
-     .lineTo(x + w * 0.138, y + h)
+  // Dark teal accent bottom-left corner — SVG: M0 93 L30 107 L0 107 Z
+  doc.moveTo(x,             y + h * 0.869)
+     .lineTo(x + w * 0.176, y + h)
      .lineTo(x,             y + h)
      .fill(tealDark);
 
@@ -263,69 +272,75 @@ function tStudentTeal(doc, x, y, w, h, d) {
   // ── Watermark ──
   wm(doc, x, y, w, h, d.logo);
 
-  // ── School logo (top-left) ──
-  const logoSz = h * 0.13;
-  const logoX  = x + w * 0.03;
-  const logoY  = y + h * 0.05;
+  // ── School logo (top-left) with white box — SVG: rect(4,4,22,22) + logo ──
+  const logoSz = h * 0.145;
+  const logoX  = x + w * 0.024;
+  const logoY  = y + h * 0.037;
+  doc.rect(logoX - 1, logoY - 1, logoSz + 2, logoSz + 2).fill('#ffffff');
   if (d.logo) drawLogo(doc, logoX, logoY, logoSz, d.logo);
 
-  // School name + address (smaller, tighter)
+  // School name + address — vertically centered with logo box
   const snX   = logoX + logoSz + 3;
-  const snW   = w * 0.27;
+  const snW   = w * 0.25;
   const sName = titleCase(d.schoolName || 'School Name');
   const snFs  = fitText(doc, sName, snW, 'Helvetica-Bold', 7, 5);
-  doc.font('Helvetica-Bold').fontSize(snFs).fillColor(tealDark)
-     .text(sName, snX, logoY + 1, { width: snW, align: 'left', lineBreak: false });
+  const snCenterY = logoY + logoSz * 0.38;
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#111111')
+     .text(sName, snX, snCenterY, { width: snW, align: 'left', lineBreak: false });
   if (d.schoolAddress) {
-    doc.font('Helvetica').fontSize(4.5).fillColor('#777777')
-       .text(d.schoolAddress, snX, logoY + snFs + 1.5, { width: snW, align: 'left', lineBreak: false });
+    doc.font('Helvetica').fontSize(4.5).fillColor('#666666')
+       .text(d.schoolAddress, snX, snCenterY + snFs + 1.5, { width: snW, align: 'left', lineBreak: false });
   }
 
-  // ── "STUDENT ID CARD" pill badge — top-right inside teal shape ──
-  const badgeW = w * 0.300;
-  const badgeH = h * 0.088;
-  const badgeX = x + w * 0.572;
-  const badgeY = y + h * 0.038;
-  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(tealDeep);
-  // Thin white inner ring — stays visible over the teal background shape
-  doc.roundedRect(badgeX + 0.8, badgeY + 0.8, badgeW - 1.6, badgeH - 1.6, (badgeH - 1.6) / 2)
-     .lineWidth(0.6).strokeColor('#ffffff').stroke();
-  doc.font('Helvetica-Bold').fontSize(6.2).fillColor('#ffffff')
-     .text('STUDENT ID CARD', badgeX, badgeY + badgeH * 0.27, { width: badgeW, align: 'center', lineBreak: false });
+  // ── "Date Of Issue" on teal shape (top-right) — SVG: x=132, y=13/20 ──
+  const doiX = x + w * 0.750;
+  const doiW = w * 0.220;
+  doc.font('Helvetica-Bold').fontSize(5).fillColor('#ffffff')
+     .text('Date Of Issue', doiX, y + h * 0.100, { width: doiW, align: 'center', lineBreak: false });
+  const now = new Date();
+  const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const dateStr = `${String(now.getDate()).padStart(2,'0')} ${MON[now.getMonth()]} ${now.getFullYear()}`;
+  doc.font('Helvetica').fontSize(4.5).fillColor('#ffffff')
+     .text(dateStr, doiX, y + h * 0.175, { width: doiW, align: 'center', lineBreak: false });
 
-  // ── Circular photo — vertically centered with text block ──
-  const photoR  = h * 0.190;
-  const photoCX = x + w * 0.172;
-  const photoCY = y + h * 0.499;
-  drawCircularPhoto(doc, d.profileImage, photoCX, photoCY, photoR, teal, 1.8);
+  // ── "ID CARD" pill badge (card body) — SVG: rect(64,27,64,13) fill=teal ──
+  const badgeW = w * 0.376;
+  const badgeH = h * 0.121;
+  const badgeX = x + w * 0.376;
+  const badgeY = y + h * 0.242;
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(teal);
+  doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff')
+     .text('ID CARD', badgeX, badgeY + badgeH * 0.28, { width: badgeW, align: 'center', lineBreak: false });
 
-  // ── Student name — shifted left, with top breathing room ──
-  const nameX  = x + w * 0.360;
-  const nameW  = w * 0.475;
+  // ── Passport-style square photo ──
+  const photoW = w * 0.188;   // 32/170
+  const photoH = h * 0.327;   // 35/107
+  const photoX = x + w * 0.106; // 18/170
+  const photoY = y + h * 0.374; // 40/107
+  doc.roundedRect(photoX - 1.8, photoY - 1.8, photoW + 3.6, photoH + 3.6, 3).lineWidth(1.8).strokeColor(teal).stroke();
+  drawSquarePhoto(doc, d.profileImage, photoX, photoY, photoW, photoH, 2);
+
+  // ── Student name — SVG: x=64, y=50, color=teal ──
+  const nameX   = x + w * 0.376;
+  const nameW   = w * 0.475;
   const nameStr = titleCase(d.name || 'Student Name');
   const nameFs  = fitText(doc, nameStr, nameW, 'Helvetica-Bold', 9.5, 6.5);
-  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(tealDark)
-     .text(nameStr, nameX, y + h * 0.220, { width: nameW, align: 'left', lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(teal)
+     .text(nameStr, nameX, y + h * 0.430, { width: nameW, align: 'left', lineBreak: false });
 
-  // Thin divider under name
-  doc.moveTo(nameX, y + h * 0.334)
-     .lineTo(nameX + nameW, y + h * 0.334)
-     .lineWidth(0.7).strokeColor(tealLight).stroke();
-
-  // ── Info fields (compact) ──
+  // ── Info fields (3 fields) — SVG: Student Id / Roll No / Class, y=61, lh=9 ──
   const fX     = nameX;
   const colonX = nameX + w * 0.178;
   const valX   = colonX + 5;
   const valW   = x + w * 0.915 - valX;
   const fFs    = 6.8;
-  const lineH  = h * 0.104;
-  let   fy     = y + h * 0.362;
+  const lineH  = h * 0.068;
+  let   fy     = y + h * 0.524;
 
   [
-    ['Student ID', d.studentId || 'N/A'],
+    ['Student Id', d.studentId || 'N/A'],
     ['Roll No',    d.roll      || 'N/A'],
     ['Class',      d.class     || 'N/A'],
-    ['Session',    d.session   || 'N/A'],
   ].forEach(([lbl, val]) => {
     doc.font('Helvetica').fontSize(fFs).fillColor('#555555')
        .text(lbl, fX, fy, { lineBreak: false });
@@ -337,16 +352,14 @@ function tStudentTeal(doc, x, y, w, h, d) {
     fy += lineH;
   });
 
-  // ── QR code (inside bottom-left teal shape) ──
-  const qrSz = h * 0.163;
-  drawQR(doc, x + w * 0.028, y + h * 0.805, qrSz, '#000000');
+  // ── "ACADEMIC YEAR" + session — SVG: x=64, y=93/100, color=teal ──
+  doc.font('Helvetica-Bold').fontSize(5).fillColor('#111111')
+     .text('ACADEMIC YEAR', nameX, y + h * 0.869, { width: w * 0.30, align: 'left', lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(teal)
+     .text(d.session || '2025-2026', nameX, y + h * 0.920, { width: w * 0.30, align: 'left', lineBreak: false });
 
-  // ── Contact (bottom-center) ──
-  doc.font('Helvetica').fontSize(5.5).fillColor('#555555')
-     .text(d.contact || '', x + w * 0.215, y + h * 0.915, { width: w * 0.41, align: 'center', lineBreak: false });
-
-  // ── Principal signature (bottom-right) ──
-  drawSignature(doc, d.principalName, x + w * 0.695, y + h * 0.872, w * 0.25, tealDark);
+  // ── Principal signature (bottom-right) — SVG: x=116/170, y=94/107, w=46/170 ──
+  drawSignature(doc, d.principalName, x + w * 0.682, y + h * 0.892, w * 0.271, tealDark);
 }
 
 // ── TEMPLATE 1: Student Vertical — PROFESSIONAL ───────────────────────────────
@@ -1351,7 +1364,7 @@ async function getPersonData(req, schoolId, role, classId, personId, rollNumber,
     // Fetch class if staff is a teacher
     if (p && role === 'teacher') {
       // 1. Check if they are a primary Class Teacher
-      c = await Class.findOne({ classTeacher: p._id, isActive: true }).lean();
+      c = await Class.findOne({ classTeacher: p._id.toString(), isActive: true }).lean();
 
       // 2. Fallback: Check their assignedClasses array
       if (!c && p.assignedClasses && p.assignedClasses.length > 0) {
