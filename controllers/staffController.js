@@ -934,6 +934,38 @@ export const getAllStaffMonthlyReports = async (req, res) => {
 };
 
 /**
+ * @desc    Get attendance records for a staff member
+ * @route   GET /api/admin/staff/:id/attendance
+ * @access  Admin only
+ */
+export const getStaffAttendance = async (req, res) => {
+  try {
+    const StaffAttendance = await getModel(req.schoolId, 'staffattendance');
+    const Staff = await getModel(req.schoolId, 'staffs');
+
+    // Check if staff exists
+    const staff = await Staff.findById(req.params.id);
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff not found' });
+    }
+
+    // Get last 30 days of attendance records (or all available)
+    const records = await StaffAttendance.find({ staffId: req.params.id })
+      .sort({ date: -1 })
+      .limit(100);
+
+    return res.status(200).json({ success: true, data: records });
+  } catch (error) {
+    console.error('getStaffAttendance error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
  * @desc    Delete a staff member permanently
  * @route   DELETE /api/admin/staff/:id
  * @access  Admin only

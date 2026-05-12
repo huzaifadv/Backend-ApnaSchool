@@ -80,15 +80,19 @@ function wm(doc, x, y, w, h, logo) {
 }
 
 function drawCircularPhoto(doc, buf, cx, cy, r, borderColor, borderWidth) {
+  const bw = borderWidth || 2;
   doc.save();
-  doc.circle(cx, cy, r + (borderWidth || 2)).lineWidth(borderWidth || 2).strokeColor(borderColor || '#ffffff').stroke();
+  // Border ring
+  doc.circle(cx, cy, r + bw).lineWidth(bw).strokeColor(borderColor || '#ffffff').stroke();
+  // Clip to exact circle — rect clip first so Chrome PDF viewer shows no oversized bounding box
+  doc.rect(cx - r, cy - r, r * 2, r * 2).clip();
   doc.circle(cx, cy, r).clip();
   doc.circle(cx, cy, r).fill('#e0e0e0');
   if (!buf) {
     doc.circle(cx, cy - r * 0.15, r * 0.32).fill('#b5b5b5');
     doc.ellipse(cx, cy + r * 0.55, r * 0.45, r * 0.32).fill('#b5b5b5');
   } else {
-    try { doc.image(buf, cx - r, cy - r, { width: r * 2, height: r * 2, cover: [r * 2, r * 2], align: 'center', valign: 'center' }); } catch { }
+    try { doc.image(buf, cx - r, cy - r, { width: r * 2, height: r * 2 }); } catch { }
   }
   doc.restore();
 }
@@ -228,20 +232,156 @@ function drawFieldRow(doc, label, value, lx, vx, y, maxFs, lColor, vColor, avail
     .text(valStr, vx, y, { lineBreak: false });
 }
 
-// ── TEMPLATE 1: Student Teal Horizontal (Image 1) ─────────────────────────────
-// White bg, teal decorative shapes top-right & bottom-left, circular photo left,
-// info right, "STUDENT ID CARD" pill badge, principal signature bottom-right
+// ── TEMPLATE 1: Student Teal Horizontal (Original Style — Polished) ───────────
+// Same design language as original: white bg, teal corner shapes, circular photo,
+// pill badge — but tighter, smaller, properly aligned for a professional real card
 function tStudentTeal(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#1a9e8f');
-  const dk = darken(p, 0.25);
-  const lt = lighten(p, 0.85);
+  const teal = resolveColor(d.primaryColor, '#1a9e8f');
+  const tealDark = darken(teal, 0.26);
 
-  // White background
+  // ── White background ──
   doc.rect(x, y, w, h).fill('#ffffff');
 
-  // ── Teal decorative shape top-right ──
+  // ── Decorative shapes (clipped to card) ──
   doc.save();
   doc.rect(x, y, w, h).clip();
+
+  // Top-right teal arc — SVG: M90 0 L170 0 L170 55 Q146 36 118 14 Q104 3 90 0 Z
+  doc.moveTo(x + w * 0.529, y)
+    .lineTo(x + w, y)
+    .lineTo(x + w, y + h * 0.514)
+    .quadraticCurveTo(x + w * 0.859, y + h * 0.336, x + w * 0.694, y + h * 0.131)
+    .quadraticCurveTo(x + w * 0.612, y + h * 0.028, x + w * 0.529, y)
+    .fill(teal);
+
+  // Top-right dark teal accent — SVG: M122 0 L170 0 L170 25 Q150 10 122 0 Z
+  doc.moveTo(x + w * 0.718, y)
+    .lineTo(x + w, y)
+    .lineTo(x + w, y + h * 0.234)
+    .quadraticCurveTo(x + w * 0.882, y + h * 0.093, x + w * 0.718, y)
+    .fill(tealDark);
+
+  // Bottom-left teal triangle — SVG: M0 78 L54 107 L0 107 Z
+  doc.moveTo(x, y + h * 0.729)
+    .lineTo(x + w * 0.318, y + h)
+    .lineTo(x, y + h)
+    .fill(teal);
+
+  // Dark teal accent bottom-left corner — SVG: M0 93 L30 107 L0 107 Z
+  doc.moveTo(x, y + h * 0.869)
+    .lineTo(x + w * 0.176, y + h)
+    .lineTo(x, y + h)
+    .fill(tealDark);
+
+  doc.restore();
+
+  // ── Watermark ──
+  wm(doc, x, y, w, h, d.logo);
+
+  // ── School logo (top-left) with white box — SVG: rect(4,4,22,22) + logo ──
+  const logoSz = h * 0.145;
+  const logoX = x + w * 0.024;
+  const logoY = y + h * 0.037;
+  doc.rect(logoX - 1, logoY - 1, logoSz + 2, logoSz + 2).fill('#ffffff');
+  if (d.logo) drawLogo(doc, logoX, logoY, logoSz, d.logo);
+
+  // School name + address — vertically centered with logo box
+  const snX = logoX + logoSz + 3;
+  const snW = w * 0.25;
+  const sName = titleCase(d.schoolName || 'School Name');
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 7, 5);
+  const snCenterY = logoY + logoSz * 0.38;
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor('#111111')
+    .text(sName, snX, snCenterY, { width: snW, align: 'left', lineBreak: false });
+  if (d.schoolAddress) {
+    doc.font('Helvetica').fontSize(4.5).fillColor('#666666')
+      .text(d.schoolAddress, snX, snCenterY + snFs + 1.5, { width: snW, align: 'left', lineBreak: false });
+  }
+
+  // ── "Date Of Issue" on teal shape (top-right) — SVG: x=132, y=13/20 ──
+  const doiX = x + w * 0.750;
+  const doiW = w * 0.220;
+  doc.font('Helvetica-Bold').fontSize(5).fillColor('#ffffff')
+    .text('Date Of Issue', doiX, y + h * 0.100, { width: doiW, align: 'center', lineBreak: false });
+  const now = new Date();
+  const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const dateStr = `${String(now.getDate()).padStart(2, '0')} ${MON[now.getMonth()]} ${now.getFullYear()}`;
+  doc.font('Helvetica').fontSize(4.5).fillColor('#ffffff')
+    .text(dateStr, doiX, y + h * 0.175, { width: doiW, align: 'center', lineBreak: false });
+
+  // ── "ID CARD" pill badge (card body) — SVG: rect(64,27,64,13) fill=teal ──
+  const badgeW = w * 0.376;
+  const badgeH = h * 0.121;
+  const badgeX = x + w * 0.376;
+  const badgeY = y + h * 0.242;
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2).fill(teal);
+  doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff')
+    .text('ID CARD', badgeX, badgeY + badgeH * 0.28, { width: badgeW, align: 'center', lineBreak: false });
+
+  // ── Passport-style square photo ──
+  const photoW = w * 0.188;   // 32/170
+  const photoH = h * 0.327;   // 35/107
+  const photoX = x + w * 0.106; // 18/170
+  const photoY = y + h * 0.374; // 40/107
+  doc.roundedRect(photoX - 1.8, photoY - 1.8, photoW + 3.6, photoH + 3.6, 3).lineWidth(1.8).strokeColor(teal).stroke();
+  drawSquarePhoto(doc, d.profileImage, photoX, photoY, photoW, photoH, 2);
+
+  // ── Student name — SVG: x=64, y=50, color=teal ──
+  const nameX = x + w * 0.376;
+  const nameW = w * 0.475;
+  const nameStr = titleCase(d.name || 'Student Name');
+  const nameFs = fitText(doc, nameStr, nameW, 'Helvetica-Bold', 9.5, 6.5);
+  doc.font('Helvetica-Bold').fontSize(nameFs).fillColor(teal)
+    .text(nameStr, nameX, y + h * 0.430, { width: nameW, align: 'left', lineBreak: false });
+
+  // ── Info fields (3 fields) — SVG: Student Id / Roll No / Class, y=61, lh=9 ──
+  const fX = nameX;
+  const colonX = nameX + w * 0.178;
+  const valX = colonX + 5;
+  const valW = x + w * 0.915 - valX;
+  const fFs = 6.8;
+  const lineH = h * 0.068;
+  let fy = y + h * 0.524;
+
+  [
+    ['Student Id', d.studentId || 'N/A'],
+    ['Roll No', d.roll || 'N/A'],
+    ['Class', d.class || 'N/A'],
+  ].forEach(([lbl, val]) => {
+    doc.font('Helvetica').fontSize(fFs).fillColor('#555555')
+      .text(lbl, fX, fy, { lineBreak: false });
+    doc.font('Helvetica').fontSize(fFs).fillColor('#999999')
+      .text(':', colonX, fy, { lineBreak: false });
+    const vFs = fitText(doc, String(val), valW, 'Helvetica-Bold', fFs, 5);
+    doc.font('Helvetica-Bold').fontSize(vFs).fillColor('#111111')
+      .text(String(val), valX, fy, { lineBreak: false });
+    fy += lineH;
+  });
+
+  // ── "ACADEMIC YEAR" + session — SVG: x=64, y=93/100, color=teal ──
+  doc.font('Helvetica-Bold').fontSize(5).fillColor('#111111')
+    .text('ACADEMIC YEAR', nameX, y + h * 0.869, { width: w * 0.30, align: 'left', lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(teal)
+    .text(d.session || '2025-2026', nameX, y + h * 0.920, { width: w * 0.30, align: 'left', lineBreak: false });
+
+  // ── Principal signature (bottom-right) — SVG: x=116/170, y=94/107, w=46/170 ──
+  drawSignature(doc, d.principalName, x + w * 0.682, y + h * 0.892, w * 0.271, tealDark);
+}
+
+// ── TEMPLATE 1: Student Vertical — PROFESSIONAL ───────────────────────────────
+function tStudentVBlue(doc, x, y, w, h, d) {
+  const p = resolveColor(d.primaryColor, '#6b21a8');
+  const dk = darken(p, 0.24);
+  const lt = lighten(p, 0.92);
+
+  doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Top-right teal decorative area ──
+  // Large rounded shape top right
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+
+  // Top-right big arc/block
   doc.moveTo(x + w * 0.52, y)
     .lineTo(x + w, y)
     .lineTo(x + w, y + h * 0.48)
@@ -1268,7 +1408,7 @@ async function getPersonData(req, schoolId, role, classId, personId, rollNumber,
         p = await Staff.findOne(q).lean();
       }
       if (p && role === 'teacher') {
-        c = await Class.findOne({ classTeacher: p._id, isActive: { $ne: false } }).lean();
+        c = await Class.findOne({ classTeacher: p._id.toString(), isActive: { $ne: false } }).lean();
         if (!c && p.assignedClasses && p.assignedClasses.length > 0) {
           const firstAssigned = p.assignedClasses[0];
           const cId = firstAssigned.classId || firstAssigned._id || firstAssigned;
