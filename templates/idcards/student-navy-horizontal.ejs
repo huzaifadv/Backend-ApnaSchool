@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student ID Card - Navy Gold</title>
+
+  <style>
+    /* ============================================================
+       RESET
+       ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    /* ============================================================
+       CARD CONTAINER (CR80: 85.6mm × 54mm)
+       ============================================================ */
+    body {
+      width: 85.6mm;
+      height: 54mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 85.6mm;
+      height: 54mm;
+      background: <%= primaryColor %>;
+      overflow: hidden;
+    }
+
+
+    /* ============================================================
+       GOLD ACCENT STRIPES (right side)
+       ============================================================ */
+    .stripe {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+    }
+
+    .stripe--primary {
+      right: 6mm;
+      width: 3.5mm;
+      background: #c9a227;
+    }
+
+    .stripe--secondary {
+      right: 0;
+      width: 5mm;
+      background: #e8c84a;
+    }
+
+
+    /* ============================================================
+       HEADER (top-left logo + school name)
+       ============================================================ */
+    .header {
+      position: absolute;
+      top: 2mm;
+      left: 2mm;
+      display: flex;
+      align-items: center;
+      gap: 1.5mm;
+    }
+
+    .header__logo {
+      flex-shrink: 0;
+      width: 7mm;
+      height: 7mm;
+    }
+
+    .header__logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .header__school-name {
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .header__school-address {
+      margin-top: 0.3mm;
+      font-size: 3.5pt;
+      color: #aaaaaa;
+    }
+
+
+    /* ============================================================
+       DATE OF ISSUE (top-right)
+       ============================================================ */
+    .issue-date {
+      position: absolute;
+      top: 3mm;
+      right: 8mm;
+      text-align: right;
+    }
+
+    .issue-date__label {
+      font-size: 5pt;
+      font-weight: 700;
+      color: #cccccc;
+    }
+
+    .issue-date__value {
+      margin-top: 0.3mm;
+      font-size: 4.5pt;
+      color: #aaaaaa;
+    }
+
+
+    /* ============================================================
+       CIRCULAR PHOTO (left-center)
+       ============================================================ */
+    .photo {
+      position: absolute;
+      top: 12mm;
+      left: 4mm;
+      width: 20mm;
+      height: 20mm;
+      background: #2a3a5a;
+      border: 2px solid #c9a227;
+      border-radius: 50%;
+      overflow: hidden;
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo__placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* ============================================================
+       STUDENT NAME
+       ============================================================ */
+    .student-name {
+      position: absolute;
+      top: 9mm;
+      left: 30mm;
+      width: 34mm;
+      font-size: 9pt;
+      font-weight: 700;
+      color: #c9a227;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+
+    /* ============================================================
+       INFO FIELDS
+       ============================================================ */
+    .fields {
+      position: absolute;
+      top: 17mm;
+      left: 30mm;
+    }
+
+    .field {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 1.5mm;
+    }
+
+    .field__label {
+      width: 13mm;
+      font-size: 5.5pt;
+      color: #c0c8d8;
+    }
+
+    .field__colon {
+      margin-right: 1mm;
+      font-size: 5.5pt;
+      color: #c0c8d8;
+    }
+
+    .field__value {
+      max-width: 22mm;
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+
+    /* ============================================================
+       QR CODE (bottom-left)
+       ============================================================ */
+    .qr {
+      position: absolute;
+      bottom: 2mm;
+      left: 2mm;
+      width: 10mm;
+      height: 10mm;
+    }
+
+    .qr svg {
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* ============================================================
+       PRINCIPAL SIGNATURE (bottom-right)
+       ============================================================ */
+    .signature {
+      position: absolute;
+      bottom: 3mm;
+      right: 8mm;
+      width: 22mm;
+      text-align: center;
+    }
+
+    .signature__name {
+      font-family: Georgia, serif;
+      font-size: 5.5pt;
+      font-style: italic;
+      font-weight: 700;
+      color: #cccccc;
+    }
+
+    .signature__line {
+      margin: 1mm 0 0.5mm;
+      border-top: 0.5px solid #cccccc;
+    }
+
+    .signature__title {
+      font-size: 3.5pt;
+      color: #cccccc;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- Gold accent stripes -->
+    <div class="stripe stripe--primary"></div>
+    <div class="stripe stripe--secondary"></div>
+
+    <!-- Header: Logo + School Name -->
+    <div class="header">
+      <div class="header__logo">
+        <% if (logo) { %>
+          <img src="<%= logo %>" alt="School Logo">
+        <% } %>
+      </div>
+
+      <div class="header__text">
+        <div class="header__school-name">
+          <%= schoolName || 'School Name' %>
+        </div>
+
+        <% if (schoolAddress) { %>
+          <div class="header__school-address">
+            <%= schoolAddress %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Date of Issue -->
+    <div class="issue-date">
+      <div class="issue-date__label">Date Of Issue</div>
+      <div class="issue-date__value"><%= issueDate %></div>
+    </div>
+
+    <!-- Circular Student Photo -->
+    <div class="photo">
+      <% if (photo) { %>
+        <img src="<%= photo %>" alt="Student Photo">
+      <% } else { %>
+        <div class="photo__placeholder">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5a6a8a" stroke-width="1.5">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- Student Name -->
+    <div class="student-name">
+      <%= (name || 'STUDENT NAME').toUpperCase() %>
+    </div>
+
+    <!-- Info Fields -->
+    <div class="fields">
+      <div class="field">
+        <span class="field__label">ID</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= studentId || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Roll No</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= roll || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Class</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= cls || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Session</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= session || 'N/A' %></span>
+      </div>
+    </div>
+
+    <!-- QR Code -->
+    <div class="qr">
+      <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+        <rect width="28" height="28" fill="none" stroke="#fff" stroke-width="1"/>
+        <rect x="2" y="2" width="8" height="8" fill="none" stroke="#fff" stroke-width="0.8"/>
+        <rect x="3.5" y="3.5" width="5" height="5" fill="#fff"/>
+        <rect x="18" y="2" width="8" height="8" fill="none" stroke="#fff" stroke-width="0.8"/>
+        <rect x="19.5" y="3.5" width="5" height="5" fill="#fff"/>
+        <rect x="2" y="18" width="8" height="8" fill="none" stroke="#fff" stroke-width="0.8"/>
+        <rect x="3.5" y="19.5" width="5" height="5" fill="#fff"/>
+        <rect x="12" y="4" width="2" height="2" fill="#fff"/>
+        <rect x="14" y="6" width="2" height="2" fill="#fff"/>
+        <rect x="12" y="12" width="2" height="2" fill="#fff"/>
+        <rect x="16" y="14" width="2" height="2" fill="#fff"/>
+        <rect x="18" y="18" width="2" height="2" fill="#fff"/>
+        <rect x="22" y="20" width="2" height="2" fill="#fff"/>
+        <rect x="18" y="24" width="2" height="2" fill="#fff"/>
+        <rect x="14" y="22" width="2" height="2" fill="#fff"/>
+      </svg>
+    </div>
+
+    <!-- Principal Signature -->
+    <div class="signature">
+      <div class="signature__name"><%= principalName || 'Principal' %></div>
+      <div class="signature__line"></div>
+      <div class="signature__title">Principal Signature</div>
+    </div>
+
+  </div>
+</body>
+</html>

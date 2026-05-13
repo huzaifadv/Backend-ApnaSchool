@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Staff ID Card - Navy Wave</title>
+
+  <style>
+    /* ============================================================
+       RESET
+       ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    /* ============================================================
+       CARD CONTAINER (CR80: 85.6mm × 54mm)
+       ============================================================ */
+    body {
+      width: 85.6mm;
+      height: 54mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 85.6mm;
+      height: 54mm;
+      background: #f5f0e8;
+      overflow: hidden;
+    }
+
+    .card__bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .card__content {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+    }
+
+
+    /* ============================================================
+       HEADER QR (top-left, on navy wave)
+       ============================================================ */
+    .header-qr {
+      position: absolute;
+      top: 2mm;
+      left: 2mm;
+      width: 10mm;
+      height: 10mm;
+    }
+
+    .header-qr svg {
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* ============================================================
+       HEADER RIGHT (school name + logo)
+       ============================================================ */
+    .header-right {
+      position: absolute;
+      top: 2mm;
+      right: 9mm;
+      display: flex;
+      align-items: center;
+      gap: 1.5mm;
+    }
+
+    .header-right__text {
+      text-align: right;
+    }
+
+    .header-right__school-name {
+      font-size: 6pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .header-right__school-address {
+      margin-top: 0.3mm;
+      font-size: 3.5pt;
+      color: #99aabb;
+    }
+
+    .header-right__logo {
+      flex-shrink: 0;
+      width: 8mm;
+      height: 8mm;
+    }
+
+    .header-right__logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+
+    /* ============================================================
+       CIRCULAR STAFF PHOTO (left)
+       ============================================================ */
+    .photo {
+      position: absolute;
+      top: 19mm;
+      left: 5mm;
+      width: 20mm;
+      height: 20mm;
+      background: #d5d0c8;
+      border: 2px solid #c9a227;
+      border-radius: 50%;
+      overflow: hidden;
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo__placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* ============================================================
+       STAFF INFO (right side)
+       ============================================================ */
+    .info {
+      position: absolute;
+      top: 18mm;
+      left: 30mm;
+      right: 3mm;
+    }
+
+    .info__name {
+      margin-bottom: 1.5mm;
+      font-size: 8.5pt;
+      font-weight: 700;
+      color: <%= primaryColor %>;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+
+    /* ============================================================
+       INFO FIELD ROWS
+       ============================================================ */
+    .field {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 1.3mm;
+    }
+
+    .field__label {
+      flex-shrink: 0;
+      width: 20mm;
+      font-size: 5.5pt;
+      color: #444444;
+    }
+
+    .field__colon {
+      flex-shrink: 0;
+      margin-right: 1mm;
+      font-size: 5.5pt;
+      color: #444444;
+    }
+
+    .field__value {
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: #111111;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+
+    /* ============================================================
+       PRINCIPAL SIGNATURE (bottom-right)
+       ============================================================ */
+    .signature {
+      position: absolute;
+      bottom: 3mm;
+      right: 3mm;
+      width: 24mm;
+      text-align: center;
+    }
+
+    .signature__name {
+      font-family: Georgia, serif;
+      font-size: 5.5pt;
+      font-style: italic;
+      font-weight: 700;
+      color: #333333;
+    }
+
+    .signature__line {
+      margin: 1mm 0 0.5mm;
+      border-top: 0.5px solid #333333;
+    }
+
+    .signature__title {
+      font-size: 3.5pt;
+      color: #333333;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- Navy Wave Header (SVG background) -->
+    <svg
+      class="card__bg"
+      viewBox="0 0 242 153"
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M0 0 L242 0 L242 46 Q181.5 46 121 46 Q60.5 46 0 46 Z"
+        fill="<%= primaryColor %>"
+      />
+      <path
+        d="M0 46 Q60.5 64 121 46 Q181.5 28 242 46 L242 0 L0 0 Z"
+        fill="<%= primaryColor %>"
+      />
+    </svg>
+
+
+    <div class="card__content">
+
+      <!-- QR Code (top-left on navy) -->
+      <div class="header-qr">
+        <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+          <rect width="28" height="28" fill="none" stroke="#fff" stroke-width="1"/>
+          <rect x="2" y="2" width="8" height="8" fill="none" stroke="#fff" stroke-width="0.8"/>
+          <rect x="3.5" y="3.5" width="5" height="5" fill="#fff"/>
+          <rect x="18" y="2" width="8" height="8" fill="none" stroke="#fff" stroke-width="0.8"/>
+          <rect x="19.5" y="3.5" width="5" height="5" fill="#fff"/>
+          <rect x="2" y="18" width="8" height="8" fill="none" stroke="#fff" stroke-width="0.8"/>
+          <rect x="3.5" y="19.5" width="5" height="5" fill="#fff"/>
+          <rect x="12" y="4" width="2" height="2" fill="#fff"/>
+          <rect x="18" y="18" width="2" height="2" fill="#fff"/>
+        </svg>
+      </div>
+
+
+      <!-- School info + logo (top-right) -->
+      <div class="header-right">
+        <div class="header-right__text">
+          <div class="header-right__school-name">
+            <%= schoolName || 'School Name' %>
+          </div>
+
+          <% if (schoolAddress) { %>
+            <div class="header-right__school-address">
+              <%= schoolAddress %>
+            </div>
+          <% } %>
+        </div>
+
+        <div class="header-right__logo">
+          <% if (logo) { %>
+            <img src="<%= logo %>" alt="School Logo">
+          <% } %>
+        </div>
+      </div>
+
+
+      <!-- Circular Photo -->
+      <div class="photo">
+        <% if (photo) { %>
+          <img src="<%= photo %>" alt="Staff Photo">
+        <% } else { %>
+          <div class="photo__placeholder">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8a8070" stroke-width="1.5">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+          </div>
+        <% } %>
+      </div>
+
+
+      <!-- Staff Info + Fields -->
+      <div class="info">
+        <div class="info__name"><%= name || 'Staff Name' %></div>
+
+        <div class="field">
+          <span class="field__label">ID No</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= staffId || 'N/A' %></span>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Designation</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= designation || 'Staff' %></span>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Contact</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= contact || 'N/A' %></span>
+        </div>
+      </div>
+
+
+      <!-- Principal Signature -->
+      <div class="signature">
+        <div class="signature__name"><%= principalName || 'Principal' %></div>
+        <div class="signature__line"></div>
+        <div class="signature__title">Principal Signature</div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

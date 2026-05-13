@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student ID Card - Gold Wave</title>
+
+  <style>
+    /* ============================================================
+       RESET
+       ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    /* ============================================================
+       CARD CONTAINER (CR80: 85.6mm × 54mm)
+       ============================================================ */
+    body {
+      width: 85.6mm;
+      height: 54mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #ffffff;
+    }
+
+    .card {
+      position: relative;
+      width: 85.6mm;
+      height: 54mm;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+
+    /* ============================================================
+       DECORATIVE BACKGROUND (gold + navy flowing curves)
+       ============================================================ */
+    .card__bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+
+    /* ============================================================
+       SCHOOL HEADER (top-center, small)
+       ============================================================ */
+    .school-header {
+      position: absolute;
+      top: 3.5mm;
+      left: 30mm;
+      right: 8mm;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5mm;
+    }
+
+    .school-header__name {
+      font-size: 7pt;
+      font-weight: 800;
+      color: #1a1f3a;
+      letter-spacing: 0.5pt;
+      text-transform: uppercase;
+    }
+
+    .school-header__logo {
+      flex-shrink: 0;
+      width: 4mm;
+      height: 4mm;
+    }
+
+    .school-header__logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+
+    /* ============================================================
+       CARD TITLE: "STUDENT ID CARD"
+       ============================================================ */
+    .card-title {
+      position: absolute;
+      top: 10mm;
+      left: 30mm;
+      right: 5mm;
+      z-index: 10;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 14pt;
+      font-weight: 900;
+      color: <%= primaryColor %>;
+      letter-spacing: 0.3pt;
+    }
+
+
+    /* ============================================================
+       CIRCULAR PHOTO (left side)
+       ============================================================ */
+    .photo {
+      position: absolute;
+      top: 14mm;
+      left: 4mm;
+      width: 24mm;
+      height: 24mm;
+      background: #f0f0f0;
+      border: 1.5px solid <%= primaryColor %>;
+      border-radius: 50%;
+      overflow: hidden;
+      z-index: 10;
+      box-shadow: 0 0 0 1px #1a1f3a;
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo__placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: #e0e0e0;
+    }
+
+    .photo__placeholder svg {
+      width: 14mm;
+      height: 14mm;
+      opacity: 0.4;
+    }
+
+
+    /* ============================================================
+       INFO FIELDS (right side, below title)
+       ============================================================ */
+    .fields {
+      position: absolute;
+      top: 18mm;
+      left: 30mm;
+      right: 5mm;
+      z-index: 10;
+    }
+
+    .field {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 1.5mm;
+    }
+
+    .field__label {
+      flex-shrink: 0;
+      width: 14mm;
+      font-size: 6pt;
+      font-weight: 800;
+      color: #1a1f3a;
+      text-transform: uppercase;
+      letter-spacing: 0.3pt;
+    }
+
+    .field__colon {
+      flex-shrink: 0;
+      width: 3mm;
+      font-size: 6pt;
+      font-weight: 800;
+      color: #1a1f3a;
+    }
+
+    .field__value {
+      flex: 1;
+      font-size: 6pt;
+      font-weight: 500;
+      color: #1a1f3a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- ========================================
+         BACKGROUND DECORATIONS
+         (gold flowing curves + navy accents)
+         ======================================== -->
+    <svg
+      class="card__bg"
+      viewBox="0 0 856 540"
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <!-- ===== LEFT SIDE ===== -->
+
+      <!-- top-left gold flowing curve -->
+      <path
+        d="M 0 0
+           L 380 0
+           Q 320 75 230 125
+           Q 145 170 80 215
+           Q 35 240 0 255
+           Z"
+        fill="<%= primaryColor %>"
+      />
+
+      <!-- top-left navy accent (sits on top of gold at corner) -->
+      <path
+        d="M 0 0
+           L 220 0
+           Q 175 50 105 80
+           Q 45 110 0 130
+           Z"
+        fill="#1a1f3a"
+      />
+
+      <!-- bottom-left gold flowing curve (mirrored) -->
+      <path
+        d="M 0 540
+           L 380 540
+           Q 320 465 230 415
+           Q 145 370 80 325
+           Q 35 300 0 285
+           Z"
+        fill="<%= primaryColor %>"
+      />
+
+      <!-- bottom-left navy accent -->
+      <path
+        d="M 0 540
+           L 220 540
+           Q 175 490 105 460
+           Q 45 430 0 410
+           Z"
+        fill="#1a1f3a"
+      />
+
+
+      <!-- ===== RIGHT SIDE (mirrored) ===== -->
+
+      <!-- top-right gold flowing curve -->
+      <path
+        d="M 856 0
+           L 476 0
+           Q 536 75 626 125
+           Q 711 170 776 215
+           Q 821 240 856 255
+           Z"
+        fill="<%= primaryColor %>"
+      />
+
+      <!-- top-right navy accent -->
+      <path
+        d="M 856 0
+           L 636 0
+           Q 681 50 751 80
+           Q 811 110 856 130
+           Z"
+        fill="#1a1f3a"
+      />
+
+      <!-- bottom-right gold flowing curve -->
+      <path
+        d="M 856 540
+           L 476 540
+           Q 536 465 626 415
+           Q 711 370 776 325
+           Q 821 300 856 285
+           Z"
+        fill="<%= primaryColor %>"
+      />
+
+      <!-- bottom-right navy accent -->
+      <path
+        d="M 856 540
+           L 636 540
+           Q 681 490 751 460
+           Q 811 430 856 410
+           Z"
+        fill="#1a1f3a"
+      />
+    </svg>
+
+
+    <!-- ========================================
+         SCHOOL HEADER (small, top-right)
+         ======================================== -->
+    <div class="school-header">
+      <div class="school-header__name">
+        <%= (schoolName || 'School Name').toUpperCase() %>
+      </div>
+
+      <% if (logo) { %>
+        <div class="school-header__logo">
+          <img src="<%= logo %>" alt="School Logo">
+        </div>
+      <% } else { %>
+        <div class="school-header__logo">
+          <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M16 3 L28 9 L28 18 C28 23 22 28 16 30 C10 28 4 23 4 18 L4 9 Z"
+              fill="<%= primaryColor %>"
+              stroke="#1a1f3a"
+              stroke-width="1.5"
+            />
+          </svg>
+        </div>
+      <% } %>
+    </div>
+
+
+    <!-- Card Title -->
+    <div class="card-title">STUDENT ID CARD</div>
+
+
+    <!-- ========================================
+         CIRCULAR PHOTO (left side)
+         ======================================== -->
+    <div class="photo">
+      <% if (photo) { %>
+        <img src="<%= photo %>" alt="Student Photo">
+      <% } else { %>
+        <div class="photo__placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#1a1f3a" stroke-width="1.5">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+      <% } %>
+    </div>
+
+
+    <!-- ========================================
+         STUDENT INFO FIELDS
+         ======================================== -->
+    <div class="fields">
+      <div class="field">
+        <div class="field__label">Name</div>
+        <div class="field__colon">:</div>
+        <div class="field__value"><%= name || 'Student Name' %></div>
+      </div>
+
+      <div class="field">
+        <div class="field__label">ID</div>
+        <div class="field__colon">:</div>
+        <div class="field__value"><%= studentId || '000-000-0000' %></div>
+      </div>
+
+      <div class="field">
+        <div class="field__label">D.O.B</div>
+        <div class="field__colon">:</div>
+        <div class="field__value"><%= dob || '00/00/0000' %></div>
+      </div>
+
+      <div class="field">
+        <div class="field__label">Address</div>
+        <div class="field__colon">:</div>
+        <div class="field__value"><%= address || '—' %></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

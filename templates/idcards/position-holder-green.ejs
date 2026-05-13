@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Position Holder ID Card - Elite Green</title>
+
+  <style>
+    /* ============================================================
+       RESET
+       ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    /* ============================================================
+       CARD CONTAINER (Portrait: 54mm × 85.6mm)
+       ============================================================ */
+    body {
+      width: 54mm;
+      height: 85.6mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 54mm;
+      height: 85.6mm;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    .card__bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .card__content {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+    }
+
+
+    /* ============================================================
+       HEADER LOGO (top-left in green shield)
+       ============================================================ */
+    .header-logo {
+      position: absolute;
+      top: 2.5mm;
+      left: 2.5mm;
+      width: 8mm;
+      height: 8mm;
+    }
+
+    .header-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+
+    /* ============================================================
+       HEADER SCHOOL (top-right in green shield)
+       ============================================================ */
+    .header-school {
+      position: absolute;
+      top: 2.5mm;
+      right: 2.5mm;
+      max-width: 30mm;
+      text-align: right;
+    }
+
+    .header-school__name {
+      font-size: 6pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .header-school__address {
+      margin-top: 0.3mm;
+      font-size: 3.5pt;
+      color: #e0e0e0;
+    }
+
+
+    /* ============================================================
+       ROLE LABEL (centered, in green shield)
+       ============================================================ */
+    .role-label {
+      position: absolute;
+      top: 12mm;
+      left: 0;
+      right: 0;
+      font-size: 4.5pt;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 1pt;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+
+    /* ============================================================
+       HEXAGONAL PHOTO (centered, below shield)
+       ============================================================ */
+    .hex-wrapper {
+      position: absolute;
+      top: 17mm;
+      left: 50%;
+      width: 22mm;
+      height: 22mm;
+      transform: translateX(-50%);
+    }
+
+    .hex-outer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22mm;
+      height: 22mm;
+      background: <%= darkenColor %>;
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    }
+
+    .hex-inner {
+      width: 19.5mm;
+      height: 19.5mm;
+      background: #ffffff;
+      overflow: hidden;
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    }
+
+    .hex-inner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .hex-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: #c8e0cc;
+    }
+
+
+    /* ============================================================
+       HOLDER NAME + POSITION TITLE
+       ============================================================ */
+    .holder-name {
+      position: absolute;
+      top: 41mm;
+      left: 2mm;
+      right: 2mm;
+      font-size: 8pt;
+      font-weight: 700;
+      color: <%= primaryColor %>;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .position-title {
+      position: absolute;
+      top: 48mm;
+      left: 2mm;
+      right: 2mm;
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: #444444;
+      text-align: center;
+    }
+
+
+    /* ============================================================
+       INFO FIELDS
+       ============================================================ */
+    .fields {
+      position: absolute;
+      top: 52mm;
+      left: 5mm;
+      right: 5mm;
+    }
+
+    .field {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 1.5mm;
+    }
+
+    .field__label {
+      flex-shrink: 0;
+      width: 17mm;
+      font-size: 5.5pt;
+      color: #555555;
+    }
+
+    .field__colon {
+      flex-shrink: 0;
+      margin-right: 1mm;
+      font-size: 5.5pt;
+      color: #555555;
+    }
+
+    .field__value {
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: #111111;
+    }
+
+
+    /* ============================================================
+       BOTTOM ROW (QR + Signature)
+       ============================================================ */
+    .bottom {
+      position: absolute;
+      bottom: 3mm;
+      left: 3mm;
+      right: 3mm;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .qr {
+      width: 11mm;
+      height: 11mm;
+    }
+
+    .qr svg {
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* ============================================================
+       SIGNATURE
+       ============================================================ */
+    .signature {
+      width: 24mm;
+      text-align: center;
+    }
+
+    .signature__name {
+      font-family: Georgia, serif;
+      font-size: 4.5pt;
+      font-style: italic;
+      font-weight: 700;
+      color: #333333;
+    }
+
+    .signature__line {
+      margin: 0.8mm 0 0.5mm;
+      border-top: 0.5px solid #333333;
+    }
+
+    .signature__title {
+      font-size: 3pt;
+      color: #333333;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- Green Shield Header (SVG background) -->
+    <svg
+      class="card__bg"
+      viewBox="0 0 153 242"
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M0 0 L153 0 L153 52 L76.5 88 L0 52 Z"
+        fill="<%= primaryColor %>"
+      />
+    </svg>
+
+
+    <div class="card__content">
+
+      <!-- Logo (top-left in shield) -->
+      <div class="header-logo">
+        <% if (logo) { %>
+          <img src="<%= logo %>" alt="School Logo">
+        <% } %>
+      </div>
+
+
+      <!-- School info (top-right in shield) -->
+      <div class="header-school">
+        <div class="header-school__name">
+          <%= schoolName || 'School Name' %>
+        </div>
+
+        <% if (schoolAddress) { %>
+          <div class="header-school__address">
+            <%= schoolAddress %>
+          </div>
+        <% } %>
+      </div>
+
+
+      <!-- Role Label -->
+      <div class="role-label">POSITION HOLDER</div>
+
+
+      <!-- Hexagon Photo -->
+      <div class="hex-wrapper">
+        <div class="hex-outer">
+          <div class="hex-inner">
+            <% if (photo) { %>
+              <img src="<%= photo %>" alt="Holder Photo">
+            <% } else { %>
+              <div class="hex-placeholder">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4a8a54" stroke-width="1.5">
+                  <circle cx="12" cy="8" r="4"/>
+                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                </svg>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Name + Position -->
+      <div class="holder-name"><%= name || 'NAME HERE' %></div>
+      <div class="position-title"><%= (position || 'Head Boy').toUpperCase() %></div>
+
+
+      <!-- Info Fields -->
+      <div class="fields">
+        <div class="field">
+          <span class="field__label">Student ID</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= studentId || 'N/A' %></span>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Roll No</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= roll || 'N/A' %></span>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Class</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= cls || 'N/A' %></span>
+        </div>
+      </div>
+
+
+      <!-- Bottom: QR + Signature -->
+      <div class="bottom">
+        <div class="qr">
+          <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+            <rect width="28" height="28" fill="none" stroke="<%= primaryColor %>" stroke-width="1"/>
+            <rect x="2" y="2" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+            <rect x="3.5" y="3.5" width="5" height="5" fill="<%= primaryColor %>"/>
+            <rect x="18" y="2" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+            <rect x="19.5" y="3.5" width="5" height="5" fill="<%= primaryColor %>"/>
+            <rect x="2" y="18" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+            <rect x="3.5" y="19.5" width="5" height="5" fill="<%= primaryColor %>"/>
+            <rect x="18" y="18" width="2" height="2" fill="<%= primaryColor %>"/>
+          </svg>
+        </div>
+
+        <div class="signature">
+          <div class="signature__name"><%= principalName || 'Principal' %></div>
+          <div class="signature__line"></div>
+          <div class="signature__title">Principal Signature</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

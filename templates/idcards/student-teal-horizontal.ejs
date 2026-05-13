@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student ID Card - Teal Classic</title>
+
+  <style>
+    /* ============================================================
+       RESET
+       ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    /* ============================================================
+       CARD CONTAINER (CR80 size: 85.6mm × 54mm)
+       ============================================================ */
+    body {
+      width: 85.6mm;
+      height: 54mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #ffffff;
+    }
+
+    .card {
+      position: relative;
+      width: 85.6mm;
+      height: 54mm;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    /* Decorative SVG layer (sits behind everything) */
+    .card__bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Content layer (everything above the SVG) */
+    .card__content {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+    }
+
+
+    /* ============================================================
+       HEADER (top-left logo + school name)
+       ============================================================ */
+    .header {
+      position: absolute;
+      top: 2mm;
+      left: 2mm;
+      display: flex;
+      align-items: center;
+      gap: 1.5mm;
+    }
+
+    .header__logo {
+      flex-shrink: 0;
+      width: 7.5mm;
+      height: 7.5mm;
+    }
+
+    .header__logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .header__school-name {
+      font-size: 9pt;
+      font-weight: 700;
+      color: #111111;
+      line-height: 1.2;
+    }
+
+    .header__school-address {
+      margin-top: 0.3mm;
+      font-size: 4pt;
+      color: #666666;
+    }
+
+
+    /* ============================================================
+       DATE OF ISSUE (top-right corner on teal arc)
+       ============================================================ */
+    .issue-date {
+      position: absolute;
+      top: 2mm;
+      right: 3mm;
+      text-align: center;
+    }
+
+    .issue-date__label {
+      font-size: 6pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .issue-date__value {
+      margin-top: 0.5mm;
+      font-size: 3.5pt;
+      color: #ffffff;
+    }
+
+
+    /* ============================================================
+       ID CARD BADGE (pill shape)
+       ============================================================ */
+    .badge {
+      position: absolute;
+      top: 15mm;
+      left: 29mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 25mm;
+      height: 4mm;
+      background: <%= primaryColor %>;
+      border-radius: 3mm;
+    }
+
+    .badge__text {
+      font-size: 6pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+
+    /* ============================================================
+       STUDENT PHOTO
+       ============================================================ */
+    .photo {
+      position: absolute;
+      top: 15mm;
+      left: 6mm;
+      width: 20mm;
+      height: 25mm;
+      background: #e8e8e8;
+      border: 1px solid <%= primaryColor %>;
+      border-radius: 2mm;
+      overflow: hidden;
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo__placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: #dddddd;
+    }
+
+
+    /* ============================================================
+       STUDENT NAME + INFO FIELDS
+       ============================================================ */
+    .student-name {
+      position: absolute;
+      top: 21mm;
+      left: 29mm;
+      width: 40mm;
+      font-size: 13px;
+      font-weight: 700;
+      color: <%= primaryColor %>;
+    }
+
+    .fields {
+      position: absolute;
+      top: 27mm;
+      left: 29mm;
+    }
+
+    .field {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 1.2mm;
+    }
+
+    .field__label {
+      width: 16mm;
+      font-size: 7pt;
+      color: #555555;
+    }
+
+    .field__colon {
+      margin-right: 1mm;
+      font-size: 7pt;
+      color: #999999;
+    }
+
+    .field__value {
+      font-size: 7pt;
+      font-weight: 700;
+      color: #111111;
+    }
+
+
+    /* ============================================================
+       ACADEMIC YEAR (bottom-left)
+       ============================================================ */
+    .academic-year {
+      position: absolute;
+      bottom: 3.5mm;
+      left: 29mm;
+    }
+
+    .academic-year__label {
+      font-size: 4pt;
+      font-weight: 700;
+      color: #111111;
+    }
+
+    .academic-year__value {
+      margin-top: 0.3mm;
+      font-size: 6pt;
+      font-weight: 700;
+      color: <%= primaryColor %>;
+    }
+
+
+    /* ============================================================
+       PRINCIPAL SIGNATURE (bottom-right)
+       ============================================================ */
+    .signature {
+      position: absolute;
+      bottom: 3mm;
+      right: 3mm;
+      width: 24mm;
+      text-align: center;
+    }
+
+    .signature__name {
+      font-family: Georgia, serif;
+      font-size: 6pt;
+      font-style: italic;
+      font-weight: 700;
+      color: #333333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .signature__line {
+      margin: 1mm 0 0.5mm;
+      border-top: 0.5px solid #333333;
+    }
+
+    .signature__title {
+      font-size: 3.5pt;
+      color: #333333;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- ========================================
+         BACKGROUND DECORATIONS (teal corners)
+         ======================================== -->
+    <svg
+      class="card__bg"
+      viewBox="0 0 170 107"
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <!-- top-right large teal arc -->
+      <path
+        d="M91 0 L170 0 L170 55 Q146 36 118 14 Q104 3 91 0 Z"
+        fill="<%= primaryColor %>"
+      />
+
+      <!-- top-right dark teal accent -->
+      <path
+        d="M122 0 L170 0 L170 25 Q150 10 122 0 Z"
+        fill="<%= darkenColor %>"
+      />
+
+      <!-- bottom-left teal triangle -->
+      <path
+        d="M0 78 L54 107 L0 107 Z"
+        fill="<%= primaryColor %>"
+      />
+
+      <!-- bottom-left dark teal accent -->
+      <path
+        d="M0 93 L30 107 L0 107 Z"
+        fill="<%= darkenColor %>"
+      />
+    </svg>
+
+
+    <!-- ========================================
+         CARD CONTENT
+         ======================================== -->
+    <div class="card__content">
+
+      <!-- Header: Logo + School Name -->
+      <div class="header">
+        <div class="header__logo">
+          <% if (logo) { %>
+            <img src="<%= logo %>" alt="School Logo">
+          <% } %>
+        </div>
+
+        <div class="header__text">
+          <div class="header__school-name">
+            <%= schoolName || 'School Name' %>
+          </div>
+
+          <% if (schoolAddress) { %>
+            <div class="header__school-address">
+              <%= schoolAddress %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Date of Issue (top-right) -->
+      <div class="issue-date">
+        <div class="issue-date__label">Date Of Issue</div>
+        <div class="issue-date__value"><%= issueDate %></div>
+      </div>
+
+      <!-- ID CARD pill badge -->
+      <div class="badge">
+        <span class="badge__text">ID CARD</span>
+      </div>
+
+      <!-- Student Photo -->
+      <div class="photo">
+        <% if (photo) { %>
+          <img src="<%= photo %>" alt="Student Photo">
+        <% } else { %>
+          <div class="photo__placeholder">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+          </div>
+        <% } %>
+      </div>
+
+      <!-- Student Name -->
+      <div class="student-name">
+        <%= name || 'Student Name' %>
+      </div>
+
+      <!-- Info Fields -->
+      <div class="fields">
+        <div class="field">
+          <span class="field__label">Student Id</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= studentId || 'N/A' %></span>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Roll No</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= roll || 'N/A' %></span>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Class</span>
+          <span class="field__colon">:</span>
+          <span class="field__value"><%= cls || 'N/A' %></span>
+        </div>
+      </div>
+
+      <!-- Academic Year -->
+      <div class="academic-year">
+        <div class="academic-year__label">ACADEMIC YEAR</div>
+        <div class="academic-year__value"><%= session || '2025-2026' %></div>
+      </div>
+
+      <!-- Principal Signature -->
+      <div class="signature">
+        <div class="signature__name"><%= principalName || 'Principal' %></div>
+        <div class="signature__line"></div>
+        <div class="signature__title">Principal Signature</div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

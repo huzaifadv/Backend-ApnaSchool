@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Staff ID Card - Blue Teal</title>
+
+  <style>
+    /* ============================================================
+       RESET
+       ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    /* ============================================================
+       CARD CONTAINER (Portrait: 54mm × 85.6mm)
+       ============================================================ */
+    body {
+      width: 54mm;
+      height: 85.6mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 54mm;
+      height: 85.6mm;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+
+    /* ============================================================
+       BLUE HEADER
+       ============================================================ */
+    .header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 16mm;
+      display: flex;
+      align-items: center;
+      gap: 1.5mm;
+      padding: 0 2mm;
+      background: <%= primaryColor %>;
+    }
+
+    .header__logo {
+      flex-shrink: 0;
+      width: 9mm;
+      height: 9mm;
+    }
+
+    .header__logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .header__text {
+      flex: 1;
+      text-align: center;
+    }
+
+    .header__school-name {
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .header__school-address {
+      margin-top: 0.3mm;
+      font-size: 3.5pt;
+      color: #c5d8f0;
+    }
+
+
+    /* ============================================================
+       CIRCULAR STAFF PHOTO (centered)
+       ============================================================ */
+    .photo {
+      position: absolute;
+      top: 18mm;
+      left: 50%;
+      width: 18mm;
+      height: 18mm;
+      background: #e0e4ee;
+      border: 1.5px solid <%= primaryColor %>;
+      border-radius: 50%;
+      overflow: hidden;
+      transform: translateX(-50%);
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo__placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: #d0d5e8;
+    }
+
+
+    /* ============================================================
+       STAFF NAME (centered, below photo)
+       ============================================================ */
+    .staff-name {
+      position: absolute;
+      top: 38mm;
+      left: 2mm;
+      right: 2mm;
+      font-size: 7pt;
+      font-weight: 700;
+      color: #111111;
+      text-align: center;
+    }
+
+
+    /* ============================================================
+       INFO FIELDS (alternating rows)
+       ============================================================ */
+    .fields {
+      position: absolute;
+      top: 44mm;
+      left: 0;
+      right: 0;
+    }
+
+    .field {
+      display: flex;
+      align-items: baseline;
+      padding: 1.2mm 3mm;
+    }
+
+    .field:nth-child(odd) {
+      background: #f0f4f8;
+    }
+
+    .field__label {
+      flex-shrink: 0;
+      width: 18mm;
+      font-size: 5pt;
+      color: #444444;
+    }
+
+    .field__value {
+      flex: 1;
+      font-size: 5pt;
+      font-weight: 700;
+      color: #111111;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+
+    /* ============================================================
+       BOTTOM ROW (QR + Signature)
+       ============================================================ */
+    .bottom-row {
+      position: absolute;
+      bottom: 7mm;
+      left: 2mm;
+      right: 2mm;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .qr {
+      width: 11mm;
+      height: 11mm;
+    }
+
+    .qr svg {
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* ============================================================
+       SIGNATURE
+       ============================================================ */
+    .signature {
+      width: 22mm;
+      text-align: center;
+    }
+
+    .signature__name {
+      font-family: Georgia, serif;
+      font-size: 4.5pt;
+      font-style: italic;
+      font-weight: 700;
+      color: #333333;
+    }
+
+    .signature__line {
+      margin: 0.8mm 0 0.5mm;
+      border-top: 0.5px solid #333333;
+    }
+
+    .signature__title {
+      font-size: 3pt;
+      color: #333333;
+    }
+
+
+    /* ============================================================
+       ORANGE BOTTOM STRIPE
+       ============================================================ */
+    .bottom-stripe {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 6.5mm;
+      background: #e07020;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- Blue Header -->
+    <div class="header">
+      <div class="header__logo">
+        <% if (logo) { %>
+          <img src="<%= logo %>" alt="School Logo">
+        <% } %>
+      </div>
+
+      <div class="header__text">
+        <div class="header__school-name">
+          <%= schoolName || 'School Name' %>
+        </div>
+
+        <% if (schoolAddress) { %>
+          <div class="header__school-address">
+            <%= schoolAddress %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+
+    <!-- Circular Staff Photo -->
+    <div class="photo">
+      <% if (photo) { %>
+        <img src="<%= photo %>" alt="Staff Photo">
+      <% } else { %>
+        <div class="photo__placeholder">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a90aa" stroke-width="1.5">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+      <% } %>
+    </div>
+
+
+    <!-- Staff Name -->
+    <div class="staff-name"><%= name || 'Staff Name' %></div>
+
+
+    <!-- Info Fields -->
+    <div class="fields">
+      <div class="field">
+        <span class="field__label">Role</span>
+        <span class="field__value"><%= role || 'Staff' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Designation</span>
+        <span class="field__value"><%= designation || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">ID</span>
+        <span class="field__value"><%= staffId || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Contact</span>
+        <span class="field__value"><%= contact || 'N/A' %></span>
+      </div>
+    </div>
+
+
+    <!-- Bottom: QR + Signature -->
+    <div class="bottom-row">
+      <div class="qr">
+        <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+          <rect width="28" height="28" fill="none" stroke="<%= primaryColor %>" stroke-width="1"/>
+          <rect x="2" y="2" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+          <rect x="3.5" y="3.5" width="5" height="5" fill="<%= primaryColor %>"/>
+          <rect x="18" y="2" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+          <rect x="19.5" y="3.5" width="5" height="5" fill="<%= primaryColor %>"/>
+          <rect x="2" y="18" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+          <rect x="3.5" y="19.5" width="5" height="5" fill="<%= primaryColor %>"/>
+          <rect x="18" y="18" width="2" height="2" fill="<%= primaryColor %>"/>
+        </svg>
+      </div>
+
+      <div class="signature">
+        <div class="signature__name"><%= principalName || 'Principal' %></div>
+        <div class="signature__line"></div>
+        <div class="signature__title">Principal Signature</div>
+      </div>
+    </div>
+
+
+    <!-- Orange Stripe -->
+    <div class="bottom-stripe"></div>
+
+  </div>
+</body>
+</html>
