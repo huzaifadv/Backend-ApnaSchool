@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/authMiddleware.js';
-import { getClassesForIDCard, getStaffForIDCard, generateIDCards, previewIDCard } from '../controllers/idCardController.js';
+import { getClassesForIDCard, getStaffForIDCard, generateIDCards, previewIDCard, previewHtmlIDCard } from '../controllers/idCardController.js';
 
 const router = express.Router();
 
@@ -11,5 +11,6 @@ router.get('/classes', getClassesForIDCard);
 router.get('/staff', getStaffForIDCard);
 router.post('/generate', generateIDCards);
 router.post('/preview', previewIDCard);
+router.post('/preview-html', previewHtmlIDCard); // Phase 2: HTML/CSS renderer test
 
 export default router;

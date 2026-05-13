@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Security Guard ID Card - Red Authority</title>
+
+  <style>
+    /* ============================================================
+       RESET
+       ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    /* ============================================================
+       CARD CONTAINER (Portrait: 54mm × 85.6mm)
+       ============================================================ */
+    body {
+      width: 54mm;
+      height: 85.6mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 54mm;
+      height: 85.6mm;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+
+    /* ============================================================
+       RED HEADER
+       ============================================================ */
+    .header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 19mm;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2mm 2.5mm;
+      background: <%= primaryColor %>;
+    }
+
+    .header__school-name {
+      font-size: 7.5pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .header__school-address {
+      margin-top: 0.5mm;
+      font-size: 3.5pt;
+      color: #eeeeee;
+    }
+
+    .header__logo {
+      flex-shrink: 0;
+      width: 10mm;
+      height: 10mm;
+    }
+
+    .header__logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+
+    /* ============================================================
+       ROLE LABEL
+       ============================================================ */
+    .role-label {
+      position: absolute;
+      top: 20mm;
+      left: 0;
+      right: 0;
+      font-size: 6pt;
+      font-weight: 700;
+      color: <%= primaryColor %>;
+      letter-spacing: 1pt;
+      text-align: center;
+    }
+
+
+    /* ============================================================
+       GUARD PHOTO (centered)
+       ============================================================ */
+    .photo {
+      position: absolute;
+      top: 25mm;
+      left: 50%;
+      width: 19mm;
+      height: 19mm;
+      background: #eeeeee;
+      border: 1.5px solid <%= primaryColor %>;
+      overflow: hidden;
+      transform: translateX(-50%);
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo__placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: #dddddd;
+    }
+
+
+    /* ============================================================
+       GUARD NAME + DIVIDER
+       ============================================================ */
+    .guard-name {
+      position: absolute;
+      top: 46mm;
+      left: 2mm;
+      right: 2mm;
+      font-size: 7pt;
+      font-weight: 700;
+      color: #111111;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .divider {
+      position: absolute;
+      top: 51mm;
+      left: 5mm;
+      right: 5mm;
+      border-top: 0.5px solid #eeeeee;
+    }
+
+
+    /* ============================================================
+       INFO FIELDS
+       ============================================================ */
+    .fields {
+      position: absolute;
+      top: 53mm;
+      left: 4mm;
+      right: 4mm;
+    }
+
+    .field {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 1.5mm;
+    }
+
+    .field__label {
+      flex-shrink: 0;
+      width: 13mm;
+      font-size: 5.5pt;
+      color: #555555;
+    }
+
+    .field__colon {
+      flex-shrink: 0;
+      margin-right: 1mm;
+      font-size: 5.5pt;
+      color: #555555;
+    }
+
+    .field__value {
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: #111111;
+    }
+
+
+    /* ============================================================
+       BOTTOM ROW (QR + Signature)
+       ============================================================ */
+    .bottom {
+      position: absolute;
+      bottom: 3mm;
+      left: 3mm;
+      right: 3mm;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .qr {
+      width: 10mm;
+      height: 10mm;
+    }
+
+    .qr svg {
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* ============================================================
+       PRINCIPAL SIGNATURE
+       ============================================================ */
+    .signature {
+      width: 24mm;
+      text-align: center;
+    }
+
+    .signature__name {
+      font-family: Georgia, serif;
+      font-size: 5pt;
+      font-style: italic;
+      font-weight: 700;
+      color: #333333;
+    }
+
+    .signature__line {
+      margin: 1mm 0 0.5mm;
+      border-top: 0.5px solid #333333;
+    }
+
+    .signature__title {
+      font-size: 3.5pt;
+      color: #333333;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- Red Header -->
+    <div class="header">
+      <div class="header__text">
+        <div class="header__school-name">
+          <%= schoolName || 'School Name' %>
+        </div>
+
+        <% if (schoolAddress) { %>
+          <div class="header__school-address">
+            <%= schoolAddress %>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="header__logo">
+        <% if (logo) { %>
+          <img src="<%= logo %>" alt="School Logo">
+        <% } %>
+      </div>
+    </div>
+
+
+    <!-- Role Label -->
+    <div class="role-label">SECURITY GUARD</div>
+
+
+    <!-- Guard Photo -->
+    <div class="photo">
+      <% if (photo) { %>
+        <img src="<%= photo %>" alt="Guard Photo">
+      <% } else { %>
+        <div class="photo__placeholder">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+      <% } %>
+    </div>
+
+
+    <!-- Guard Name + Divider -->
+    <div class="guard-name"><%= name || 'Guard Name' %></div>
+    <div class="divider"></div>
+
+
+    <!-- Info Fields -->
+    <div class="fields">
+      <div class="field">
+        <span class="field__label">ID</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= staffId || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Contact</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= contact || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Blood</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= bloodGroup || 'N/A' %></span>
+      </div>
+    </div>
+
+
+    <!-- Bottom: QR + Signature -->
+    <div class="bottom">
+      <div class="qr">
+        <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+          <rect width="28" height="28" fill="none" stroke="<%= primaryColor %>" stroke-width="1"/>
+          <rect x="2" y="2" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+          <rect x="3.5" y="3.5" width="5" height="5" fill="<%= primaryColor %>"/>
+          <rect x="18" y="2" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+          <rect x="19.5" y="3.5" width="5" height="5" fill="<%= primaryColor %>"/>
+          <rect x="2" y="18" width="8" height="8" fill="none" stroke="<%= primaryColor %>" stroke-width="0.8"/>
+          <rect x="3.5" y="19.5" width="5" height="5" fill="<%= primaryColor %>"/>
+          <rect x="12" y="4" width="2" height="2" fill="<%= primaryColor %>"/>
+          <rect x="18" y="18" width="2" height="2" fill="<%= primaryColor %>"/>
+          <rect x="22" y="22" width="2" height="2" fill="<%= primaryColor %>"/>
+        </svg>
+      </div>
+
+      <div class="signature">
+        <div class="signature__name"><%= principalName || 'Principal' %></div>
+        <div class="signature__line"></div>
+        <div class="signature__title">Principal Signature</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

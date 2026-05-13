@@ -2,11 +2,8 @@ import PDFDocument from 'pdfkit';
 import axios from 'axios';
 import { getModel } from '../models/dynamicModels.js';
 import School from '../models/School.js';
-
-// Fallback main models (used if tenant models are empty or in non-tenant environments)
-import MainClass from '../models/Class.js';
-import MainStudent from '../models/Student.js';
-import MainTeacher from '../models/Teacher.js';
+import { renderIdCard } from '../services/htmlPdfRenderer.js';
+import { buildStudentData, buildTeacherData, toBase64DataUri } from '../services/templateData.js';
 
 const MM = 2.83465;
 const A4W = 595.28, A4H = 841.89;
@@ -1276,6 +1273,126 @@ function tClassMonitorBlue(doc, x, y, w, h, d) {
   drawSignature(doc, d.principalName, x + w * 0.68, y + h * 0.86, sigW, '#333333');
 }
 
+// ── TEMPLATE 9: Student Wave Navy Horizontal ──────────────────────────────────
+// White bg, teal wave bands top + bottom, logo+name centered in top wave,
+// gray circle top-right, "STUDENT CARD" heading left, 4 bold-label fields,
+// large rounded photo right (navy border), white barcode in bottom teal band
+function tStudentWaveNavy(doc, x, y, w, h, d) {
+  const teal = resolveColor(d.primaryColor, '#3a95b0');
+  const navy = '#1a2744';
+  const bScale = w / 170; // SVG viewBox → card coords
+
+  // White background
+  doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Top teal wave: M0 0 L170 0 L170 28 Q127.5 16 85 28 Q42.5 40 0 28 Z ──
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+  doc.moveTo(x, y)
+    .lineTo(x + w, y)
+    .lineTo(x + w, y + h * 0.262)
+    .quadraticCurveTo(x + w * 0.75, y + h * 0.150, x + w * 0.5, y + h * 0.262)
+    .quadraticCurveTo(x + w * 0.25, y + h * 0.374, x, y + h * 0.262)
+    .closePath()
+    .fill(teal);
+  doc.restore();
+
+  // ── Bottom teal wave: M0 107 L170 107 L170 81 Q127.5 93 85 81 Q42.5 69 0 81 Z ──
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+  doc.moveTo(x, y + h)
+    .lineTo(x + w, y + h)
+    .lineTo(x + w, y + h * 0.757)
+    .quadraticCurveTo(x + w * 0.75, y + h * 0.869, x + w * 0.5, y + h * 0.757)
+    .quadraticCurveTo(x + w * 0.25, y + h * 0.645, x, y + h * 0.757)
+    .closePath()
+    .fill(teal);
+  doc.restore();
+
+  // Gray decorative circle top-right
+  doc.save();
+  doc.opacity(0.28);
+  doc.circle(x + w * 0.953, y + h * 0.075, w * 0.053).fill('#999999');
+  doc.restore();
+
+  // Watermark
+  wm(doc, x, y, w, h, d.logo);
+
+  // ── Logo + school name centered in top wave ──
+  const waveH = h * 0.262;
+  const lSz = waveH * 0.50;
+  const sName = titleCase(d.schoolName || 'School Name');
+  doc.font('Helvetica-Bold').fontSize(7.5);
+  const snW = Math.min(w * 0.36, 100);
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 7.5, 5.5);
+  const approxTextW = Math.min(snW, 100);
+  const groupW = lSz + 6 + approxTextW;
+  const gStartX = x + (w - groupW) / 2;
+  const gLogoY = y + (waveH - lSz) / 2;
+  if (d.logo) drawLogo(doc, gStartX, gLogoY, lSz, d.logo);
+  const gTxtX = gStartX + lSz + 6;
+  const gTxtY = gLogoY + (lSz - snFs) / 2 - 1;
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor(navy)
+    .text(sName, gTxtX, gTxtY, { width: snW, align: 'left', lineBreak: false });
+  if (d.schoolAddress) {
+    doc.font('Helvetica').fontSize(4.5).fillColor(navy)
+      .text(d.schoolAddress, gTxtX, gTxtY + snFs + 1.5, { width: snW, align: 'left', lineBreak: false });
+  }
+
+  // ── "STUDENT CARD" heading ──
+  const headingY = y + h * 0.402; // 43/107
+  doc.font('Helvetica-Bold').fontSize(14).fillColor(navy)
+    .text('STUDENT CARD', x + w * 0.047, headingY, { lineBreak: false });
+
+  // ── Bold-label field rows ──
+  const lblX = x + w * 0.047; // 8/170
+  const valX = x + w * 0.276; // 47/170
+  // field values stay left of photo (photo starts at ~x+w*0.612)
+  const valW = x + w * 0.600 - valX;
+  const fFs = 6.5;
+  const fLH = h * 0.084; // 9/107
+  let fy = y + h * 0.486; // 52/107
+
+  [
+    ['STUDENT NAME', titleCase(d.name || 'N/A')],
+    ['STUDENT ID', d.studentId || d.roll || 'N/A'],
+    ['D.O.B', formatDate(d.dob)],
+    ['HOME ADDRESS', d.address || ''],
+  ].forEach(([lbl, val]) => {
+    doc.font('Helvetica-Bold').fontSize(fFs).fillColor(navy)
+      .text(lbl, lblX, fy, { lineBreak: false });
+    const vFs = fitText(doc, ': ' + String(val), valW, 'Helvetica', fFs, 5);
+    doc.font('Helvetica').fontSize(vFs).fillColor(navy)
+      .text(': ' + String(val), valX, fy, { lineBreak: false, width: valW });
+    fy += fLH;
+  });
+
+  // ── Photo right — large rounded corners, thick navy border ──
+  const pBorderW = 2;
+  const photoW = w * 0.353; // 60/170
+  const photoH = h * 0.505; // 54/107
+  const photoX = x + w * 0.612; // 104/170
+  const photoY = y + h * 0.262; // 28/107  — sits at wave edge
+  doc.roundedRect(photoX - pBorderW, photoY - pBorderW, photoW + pBorderW * 2, photoH + pBorderW * 2, 6)
+    .lineWidth(pBorderW).strokeColor(navy).stroke();
+  drawSquarePhoto(doc, d.profileImage, photoX, photoY, photoW, photoH, 6);
+
+  // ── Barcode — white bars inside the bottom teal band ──
+  const barcodeY = y + h * 0.794; // 85/107
+  const barcodeH = h * 0.084;     // 9/107
+  // [barWidth, gapAfter] in SVG 170-unit scale
+  const barData = [
+    [1.5, 1], [2, 1], [1, 0.5], [2.5, 1], [1, 0.5], [2, 1],
+    [1.5, 0.5], [1, 0.5], [2.5, 1], [1, 0.5], [2, 1],
+    [1.5, 0.5], [1, 0.5], [2.5, 1], [1, 0.5], [2, 1], [1.5, 0.5], [2.5, 0],
+  ];
+  let bx = x + 8 * bScale; // starts at SVG x=8
+  barData.forEach(([barW, gapW]) => {
+    doc.rect(bx, barcodeY, barW * bScale, barcodeH).fill('#ffffff');
+    bx += (barW + gapW) * bScale;
+  });
+}
+
 // ── Placeholder fallback template ─────────────────────────────────────────────
 
 function tPlaceholder(doc, x, y, w, h, d) {
@@ -1290,10 +1407,10 @@ function tPlaceholder(doc, x, y, w, h, d) {
 function drawTemplate(doc, x, y, w, h, tpl, d) {
   console.log('✏️ DRAWING TEMPLATE:', { tpl, role: d.role });
   const map = {
-
     'student-teal-horizontal': tStudentTeal,
     'student-v-blue': tStudentTeal, // New design variant
     'student-navy-horizontal': tStudentNavy,
+    'student-wave-navy': tStudentWaveNavy,
     'teacher-cream-horizontal': tTeacherCream,
     'security-red-vertical': tSecurityRed,
     'staff-navy-wave': tStaffNavyWave,
@@ -1454,6 +1571,50 @@ async function getPersonData(req, schoolId, role, classId, personId, rollNumber,
 }
 
 
+// Convert a Buffer to a base64 data URI so HTML templates can embed it
+function bufToDataUri(buf, mime = 'image/jpeg') {
+  if (!buf) return null;
+  return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+function buildHtmlData(p, c, school, photoUri, logoUri, primaryColor, role, staffType, position, principalNameOverride) {
+  const now = new Date();
+  const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const issueDate = `${String(now.getDate()).padStart(2, '0')} ${MON[now.getMonth()]} ${now.getFullYear()}`;
+
+  const pc = primaryColor && primaryColor !== '#2b6cb0' ? primaryColor : null;
+  const resolvedColor = pc || '#1a9e8f';
+  const darkenColor = '#' + hexRgb(resolvedColor).map(c => Math.max(0, Math.round(c * 0.74)).toString(16).padStart(2, '0')).join('');
+
+  return {
+    primaryColor: resolvedColor,
+    darkenColor,
+    issueDate,
+    schoolName: school?.schoolName || school?.name || 'Sample School',
+    schoolAddress: school?.address || '',
+    logo: logoUri,
+    photo: photoUri,
+    role: (role || p?.role || 'Staff').charAt(0).toUpperCase() + (role || p?.role || 'Staff').slice(1),
+    name: p.name || p.fullName || 'Name',
+    cls: c ? `${c.className} ${c.section || ''}`.trim() : (p.class || ''),
+    section: c?.section || '',
+    roll: p.rollNumber || '',
+    studentId: p.studentId || '',
+    staffId: p.staffId || '',
+    designation: (role === 'staff' && staffType) ? staffType : (p.designation || ''),
+    contact: p.contact || p.phone || '',
+    joinDate: formatDate(p.joinDate || p.joiningDate),
+    bloodGroup: p.bloodGroup || '',
+    gender: p.gender || '',
+    dob: formatDate(p.dateOfBirth || p.dob),
+    fatherName: p.fatherName || p.guardianName || '',
+    address: p.address || '',
+    session: c?.academicYear || '2025-2026',
+    position: position || '',
+    principalName: principalNameOverride || school?.principalName || school?.principal || 'Principal',
+  };
+}
+
 function buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position, principalNameOverride) {
   return {
     schoolName: school?.schoolName || 'Sample School',
@@ -1485,12 +1646,9 @@ function buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, 
 }
 
 export const previewIDCard = async (req, res) => {
-  let doc;
   try {
     const { schoolId } = req;
-    const { role = 'student', classId, templateName, personId, rollNumber, staffType, cardWidth, cardHeight, primaryColor, position, principalName } = req.body;
-
-    console.log('Generating preview for:', { role, templateName, personId });
+    const { role = 'student', classId, templateName, personId, rollNumber, staffType, primaryColor, position, principalName } = req.body;
 
     const school = await School.findById(schoolId).lean();
     let { p, c } = await getPersonData(req, schoolId, role, classId, personId, rollNumber, staffType);
@@ -1498,45 +1656,32 @@ export const previewIDCard = async (req, res) => {
     if (!p) {
       console.log('No person found, using sample data');
       p = {
-        name: 'Sample Name', fullName: 'Sample Name', rollNumber: '20', studentId: '20',
-        staffId: 'EMP-001', designation: staffType || (role === 'teacher' ? 'Teacher' : role === 'security' ? 'Security Guard' : 'Staff'),
-        contact: '03445686543', phone: '03445686543', profilePicture: null,
-        bloodGroup: 'B+', gender: 'Male', fatherName: 'Father Name', address: 'School Address'
+        name: 'Sample Person', fullName: 'Sample Person', rollNumber: '0001', studentId: 'ST-0001',
+        staffId: 'EMP-0001', designation: staffType || (role === 'teacher' ? 'Teacher' : role === 'security' ? 'Security Guard' : 'Staff'),
+        contact: '000-0000000', phone: '000-0000000', profilePicture: null,
+        bloodGroup: 'B+', gender: 'Male', fatherName: 'Father Name', address: 'School Address',
       };
-      c = { className: 'class9', section: 'A', academicYear: '2026-2027' };
+      c = { className: 'Class X', section: 'A', academicYear: '2025-2026' };
     }
 
-    const [logoBuffer, profileBuffer] = await Promise.all([
+    // fetchBuf handles relative URLs using req (same as PDFKit system did)
+    const [logoBuf, photoBuf] = await Promise.all([
       fetchBuf(school?.logo?.url || school?.logo, req),
-      fetchBuf(p.profilePicture, req)
+      fetchBuf(p.profilePicture, req),
     ]);
 
-    const { w, h } = dims(cardWidth, cardHeight, templateName);
-    doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+    const logoUri = bufToDataUri(logoBuf);
+    const photoUri = bufToDataUri(photoBuf);
 
-    doc.on('error', (err) => {
-      console.error('🔥 PDFKit Error:', err);
-    });
+    const d = buildHtmlData(p, c, school, photoUri, logoUri, primaryColor, role, staffType, position, principalName);
+    const pdfBuffer = await renderIdCard(templateName, d);
 
-    res.on('close', () => {
-      if (doc) doc.unpipe(res);
-    });
-
-    doc.addPage({ size: [w, h], margin: 0 });
     res.setHeader('Content-Type', 'application/pdf');
-    doc.pipe(res);
-
-    // Use buildData to normalize the fields
-    const data = buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, staffType, position, principalName);
-
-    drawTemplate(doc, 0, 0, w, h, templateName, data);
-    doc.end();
+    res.setHeader('Content-Disposition', 'inline; filename="preview.pdf"');
+    res.end(pdfBuffer);
 
   } catch (error) {
     console.error('🔥 PREVIEW ERROR:', error);
-    if (doc) {
-      try { doc.unpipe(res); doc.end(); } catch (e) { }
-    }
     if (!res.headersSent) {
       res.status(500).json({ success: false, message: 'Failed to generate preview', error: error.message });
     }
@@ -1546,10 +1691,9 @@ export const previewIDCard = async (req, res) => {
 
 
 export const generateIDCards = async (req, res) => {
-  let doc;
   try {
     const { schoolId } = req;
-    const { role = 'student', classId, templateName, personId, rollNumber, staffType, cardWidth, cardHeight, primaryColor, position, principalName } = req.body;
+    const { role = 'student', classId, templateName, personId, rollNumber, staffType, primaryColor, position, principalName } = req.body;
 
     const Student = await getModel(schoolId, 'students');
     const Staff = await getModel(schoolId, 'staffs');
@@ -1593,73 +1737,96 @@ export const generateIDCards = async (req, res) => {
       }
     }
 
-    const logoBuffer = fetchBuf(school?.logo?.url || school?.logo, req);
-    const { w, h } = dims(cardWidth, cardHeight, templateName);
-    const spacing = 15;
-    const cols = Math.floor((A4W - spacing) / (w + spacing)) || 1;
-    const rows = Math.floor((A4H - spacing) / (h + spacing)) || 1;
-    const cardsPerPage = cols * rows;
+    const logoBuf = await fetchBuf(school?.logo?.url || school?.logo, req);
+    const logoUri = bufToDataUri(logoBuf);
 
-    const marginX = (A4W - (cols * w + (cols - 1) * spacing)) / 2;
-    const marginY = (A4H - (rows * h + (rows - 1) * spacing)) / 2;
+    // Build card data for each person
+    const cards = await Promise.all(people.map(async (person) => {
+      let personCls = c;
+      if (role === 'teacher' && person._id) {
+        personCls = await Class.findOne({ classTeacher: person._id.toString(), isActive: true }).lean();
+      }
+      const photoBuf = await fetchBuf(person.profilePicture, req);
+      const photoUri = bufToDataUri(photoBuf);
+      const data = buildHtmlData(person, personCls, school, photoUri, logoUri, primaryColor, role, staffType, position, principalName);
+      return { templateId: templateName, data };
+    }));
 
-    doc = new PDFDocument({ size: 'A4', margin: 0 });
-
-    doc.on('error', (err) => {
-      console.error('🔥 PDF Generation Error:', err);
-    });
-
-    res.on('close', () => {
-      if (doc) doc.unpipe(res);
-    });
+    const { renderIdCardsGrid } = await import('../services/htmlPdfRenderer.js');
+    const pdfBuffer = await renderIdCardsGrid(cards);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="ID_Cards_${role}.pdf"`);
-    doc.pipe(res);
-
-    let cardsOnPage = 0;
-    for (let i = 0; i < people.length; i++) {
-      if (cardsOnPage === cardsPerPage) {
-        doc.addPage();
-        cardsOnPage = 0;
-      }
-
-      if (cardsOnPage === 0) {
-        doc.save().lineWidth(0.5).strokeColor('#ccc').dash(3, { space: 3 });
-        for (let j = 0; j <= cols; j++) {
-          const lX = marginX + j * (w + spacing) - spacing / 2;
-          if (lX > 0 && lX < A4W) doc.moveTo(lX, 0).lineTo(lX, A4H).stroke();
-        }
-        for (let j = 0; j <= rows; j++) {
-          const lY = marginY + j * (h + spacing) - spacing / 2;
-          if (lY > 0 && lY < A4H) doc.moveTo(0, lY).lineTo(A4W, lY).stroke();
-        }
-        doc.restore();
-      }
-
-      const col = cardsOnPage % cols;
-      const row = Math.floor(cardsOnPage / cols);
-      const px = marginX + col * (w + spacing);
-      const py = marginY + row * (h + spacing);
-
-      const person = people[i];
-      let personCls = c;
-      if (role === 'teacher') personCls = await Class.findOne({ classTeacher: person._id.toString(), isActive: true }).lean();
-
-      const [lBuf, pBuf] = await Promise.all([logoBuffer, fetchBuf(person.profilePicture, req)]);
-      drawTemplate(doc, px, py, w, h, templateName, buildData(person, personCls, school, pBuf, lBuf, primaryColor, role, staffType, position, principalName));
-      cardsOnPage++;
-    }
-
-    doc.end();
+    res.setHeader('Content-Disposition', `attachment; filename="ID_Cards_${role}.pdf"`);
+    res.end(pdfBuffer);
 
   } catch (error) {
     console.error('🔥 GENERATION ERROR:', error);
-    if (doc) {
-      try { doc.unpipe(res); doc.end(); } catch (e) { }
-    }
     if (!res.headersSent) {
       res.status(500).json({ success: false, message: 'Server error generating ID cards', error: error.message });
+    }
+  }
+};
+
+// ── HTML/CSS Preview (parallel test route — Phase 2) ──────────────────────────
+export const previewHtmlIDCard = async (req, res) => {
+  try {
+    const { schoolId } = req;
+    const {
+      role = 'student',
+      classId, templateName, personId, rollNumber, staffType,
+      primaryColor, position, principalName
+    } = req.body;
+
+    const school = await School.findById(schoolId).lean();
+    let { p, c } = await getPersonData(req, schoolId, role, classId, personId, rollNumber, staffType);
+
+    if (!p) {
+      p = {
+        name: 'Sample Student', rollNumber: '0001', studentId: 'ST-0001',
+        staffId: 'EMP-0001',
+        designation: staffType || (role === 'teacher' ? 'Teacher' : role === 'security' ? 'Security Guard' : 'Staff'),
+        contact: '000-0000000', phone: '000-0000000', profilePicture: null,
+        bloodGroup: 'B+', gender: 'Male', fatherName: 'Father Name', address: 'School Address',
+        dob: null,
+      };
+      c = { className: 'Class X', section: 'A' };
+    }
+
+    // Convert logo and photo to base64 data URIs for HTML embedding
+    const [logoUri, photoUri] = await Promise.all([
+      toBase64DataUri(school?.logo?.url || school?.logo),
+      toBase64DataUri(p.profilePicture),
+    ]);
+
+    let templateData;
+    if (['student', 'position_holder', 'class_monitor'].includes(role)) {
+      templateData = await buildStudentData(
+        { ...p, photo: photoUri },
+        { ...school, logo: logoUri },
+        { primaryColor }
+      );
+      templateData.photo = photoUri;
+      templateData.logo = logoUri;
+    } else {
+      templateData = await buildTeacherData(
+        { ...p, photo: photoUri },
+        { ...school, logo: logoUri },
+        { primaryColor }
+      );
+      templateData.photo = photoUri;
+      templateData.logo = logoUri;
+    }
+
+    const pdfBuffer = await renderIdCard(templateName, templateData);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="preview-html.pdf"');
+    res.end(pdfBuffer);
+
+  } catch (error) {
+    console.error('🔥 HTML PREVIEW ERROR:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'HTML preview failed', error: error.message });
     }
   }
 };
