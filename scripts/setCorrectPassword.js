@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 import SuperAdmin from '../models/SuperAdmin.js';
 
 dotenv.config();
@@ -16,24 +17,42 @@ const setPassword = async () => {
     const superAdmin = await SuperAdmin.findOne({ email: 'apnaschool.edu@gmail.com' });
 
     if (!superAdmin) {
-      console.log('❌ Super Admin not found!');
-      process.exit(1);
+      console.log('❌ Super Admin not found! Creating one...');
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash('@Apnaschool786$', salt);
+      await SuperAdmin.create({
+        name: 'Super Admin',
+        email: 'apnaschool.edu@gmail.com',
+        password: hashedPassword,
+        role: 'SUPER_ADMIN',
+        isActive: true,
+      });
+      console.log('✅ Super Admin created!');
+      console.log('Email: apnaschool.edu@gmail.com');
+      console.log('Password: @Apnaschool786$');
+      process.exit(0);
     }
 
-    // Set the correct password
-    const correctPassword = '@Apnaschool786$';
-    superAdmin.password = correctPassword;
-    superAdmin.loginAttempts = 0;
-    superAdmin.lockUntil = undefined;
-    superAdmin.isActive = true;
-    await superAdmin.save();
+    // Directly hash and update via updateOne — bypasses pre-save hooks
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash('@Apnaschool786$', salt);
+
+    await SuperAdmin.updateOne(
+      { _id: superAdmin._id },
+      {
+        $set: {
+          password: hashedPassword,
+          loginAttempts: 0,
+          isActive: true,
+        },
+        $unset: { lockUntil: 1 },
+      }
+    );
 
     console.log('✅ PASSWORD SET SUCCESSFULLY!');
     console.log('===========================================');
-    console.log('Email:', superAdmin.email);
-    console.log('Password:', correctPassword);
-    console.log('Active:', superAdmin.isActive);
-    console.log('Login Attempts:', superAdmin.loginAttempts);
+    console.log('Email: apnaschool.edu@gmail.com');
+    console.log('Password: @Apnaschool786$');
     console.log('===========================================\n');
 
   } catch (error) {

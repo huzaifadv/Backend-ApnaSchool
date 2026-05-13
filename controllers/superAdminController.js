@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import SuperAdmin from '../models/SuperAdmin.js';
 import School from '../models/School.js';
 import Admin from '../models/Admin.js';
@@ -26,11 +27,6 @@ const loginSuperAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Fixed super admin credentials
-    const FIXED_EMAIL = 'apnaschool.edu@gmail.com';
-    const FIXED_PASSWORD = '@Apnaschool786$';
-
-    // Validation
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -38,74 +34,27 @@ const loginSuperAdmin = async (req, res) => {
       });
     }
 
-    // Check if the provided credentials match the fixed credentials
-    if (email !== FIXED_EMAIL || password !== FIXED_PASSWORD) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials',
-      });
-    }
+    // Find super admin by email with hashed password
+    const superAdmin = await SuperAdmin.findOne({ email: email.toLowerCase().trim() }).select('+password');
 
-    // Check if super admin exists in database
-    let superAdmin = await SuperAdmin.findOne({ email: FIXED_EMAIL }).select('+password');
-
-    // If database is empty or super admin doesn't exist, create it
     if (!superAdmin) {
-      console.log('Creating super admin for first time login...');
-
-      try {
-        superAdmin = await SuperAdmin.create({
-          name: 'Super Admin',
-          email: FIXED_EMAIL,
-          password: FIXED_PASSWORD,
-          role: 'SUPER_ADMIN',
-          isActive: true,
-          lastLogin: new Date(),
-        });
-
-        console.log('Super admin created successfully');
-      } catch (createError) {
-        // If error is due to existing super admin, try to find it again
-        if (createError.message.includes('Only one Super Admin can exist')) {
-          superAdmin = await SuperAdmin.findOne({}).select('+password');
-
-          // Update existing super admin with fixed credentials
-          if (superAdmin) {
-            superAdmin.email = FIXED_EMAIL;
-            superAdmin.password = FIXED_PASSWORD;
-            superAdmin.isActive = true;
-            superAdmin.loginAttempts = 0;
-            superAdmin.lockUntil = undefined;
-            await superAdmin.save();
-            console.log('Updated existing super admin with fixed credentials');
-          }
-        } else {
-          throw createError;
-        }
-      }
-    } else {
-      // Super admin exists - verify it's active
-      // Check if account is locked
-      if (superAdmin.isLocked()) {
-        // Reset lock since they provided correct credentials
-        await superAdmin.resetLoginAttempts();
-      }
-
-      // Check if account is active
-      if (!superAdmin.isActive) {
-        // Reactivate account since they provided correct credentials
-        superAdmin.isActive = true;
-      }
-
-      // Reset login attempts on successful login
-      await superAdmin.resetLoginAttempts();
-
-      // Update last login
-      superAdmin.lastLogin = new Date();
-      await superAdmin.save();
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Generate token
+    // Verify password against DB hash
+    const isMatch = await superAdmin.comparePassword(password);
+
+    if (!isMatch) {
+      if (!superAdmin.isLocked()) await superAdmin.incLoginAttempts();
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    // Correct password — unlock, activate, update lastLogin
+    await SuperAdmin.updateOne(
+      { _id: superAdmin._id },
+      { $set: { loginAttempts: 0, isActive: true, lastLogin: new Date() }, $unset: { lockUntil: 1 } }
+    );
+
     const token = generateToken(superAdmin._id, superAdmin.role);
 
     res.status(200).json({
@@ -118,7 +67,7 @@ const loginSuperAdmin = async (req, res) => {
           name: superAdmin.name,
           email: superAdmin.email,
           role: superAdmin.role,
-          lastLogin: superAdmin.lastLogin,
+          lastLogin: new Date(),
         },
       },
     });
@@ -212,9 +161,14 @@ const updatePassword = async (req, res) => {
       });
     }
 
-    // Update password
-    superAdmin.password = newPassword;
-    await superAdmin.save();
+    // Hash and update password directly — bypasses pre-save hook to avoid double-hashing issues
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await SuperAdmin.updateOne(
+      { _id: req.superAdmin.id },
+      { $set: { password: hashedPassword } }
+    );
 
     res.status(200).json({
       success: true,

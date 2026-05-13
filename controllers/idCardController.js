@@ -1273,6 +1273,126 @@ function tClassMonitorBlue(doc, x, y, w, h, d) {
   drawSignature(doc, d.principalName, x + w * 0.68, y + h * 0.86, sigW, '#333333');
 }
 
+// ── TEMPLATE 9: Student Wave Navy Horizontal ──────────────────────────────────
+// White bg, teal wave bands top + bottom, logo+name centered in top wave,
+// gray circle top-right, "STUDENT CARD" heading left, 4 bold-label fields,
+// large rounded photo right (navy border), white barcode in bottom teal band
+function tStudentWaveNavy(doc, x, y, w, h, d) {
+  const teal = resolveColor(d.primaryColor, '#3a95b0');
+  const navy = '#1a2744';
+  const bScale = w / 170; // SVG viewBox → card coords
+
+  // White background
+  doc.rect(x, y, w, h).fill('#ffffff');
+
+  // ── Top teal wave: M0 0 L170 0 L170 28 Q127.5 16 85 28 Q42.5 40 0 28 Z ──
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+  doc.moveTo(x, y)
+    .lineTo(x + w, y)
+    .lineTo(x + w, y + h * 0.262)
+    .quadraticCurveTo(x + w * 0.75, y + h * 0.150, x + w * 0.5, y + h * 0.262)
+    .quadraticCurveTo(x + w * 0.25, y + h * 0.374, x, y + h * 0.262)
+    .closePath()
+    .fill(teal);
+  doc.restore();
+
+  // ── Bottom teal wave: M0 107 L170 107 L170 81 Q127.5 93 85 81 Q42.5 69 0 81 Z ──
+  doc.save();
+  doc.rect(x, y, w, h).clip();
+  doc.moveTo(x, y + h)
+    .lineTo(x + w, y + h)
+    .lineTo(x + w, y + h * 0.757)
+    .quadraticCurveTo(x + w * 0.75, y + h * 0.869, x + w * 0.5, y + h * 0.757)
+    .quadraticCurveTo(x + w * 0.25, y + h * 0.645, x, y + h * 0.757)
+    .closePath()
+    .fill(teal);
+  doc.restore();
+
+  // Gray decorative circle top-right
+  doc.save();
+  doc.opacity(0.28);
+  doc.circle(x + w * 0.953, y + h * 0.075, w * 0.053).fill('#999999');
+  doc.restore();
+
+  // Watermark
+  wm(doc, x, y, w, h, d.logo);
+
+  // ── Logo + school name centered in top wave ──
+  const waveH = h * 0.262;
+  const lSz = waveH * 0.50;
+  const sName = titleCase(d.schoolName || 'School Name');
+  doc.font('Helvetica-Bold').fontSize(7.5);
+  const snW = Math.min(w * 0.36, 100);
+  const snFs = fitText(doc, sName, snW, 'Helvetica-Bold', 7.5, 5.5);
+  const approxTextW = Math.min(snW, 100);
+  const groupW = lSz + 6 + approxTextW;
+  const gStartX = x + (w - groupW) / 2;
+  const gLogoY = y + (waveH - lSz) / 2;
+  if (d.logo) drawLogo(doc, gStartX, gLogoY, lSz, d.logo);
+  const gTxtX = gStartX + lSz + 6;
+  const gTxtY = gLogoY + (lSz - snFs) / 2 - 1;
+  doc.font('Helvetica-Bold').fontSize(snFs).fillColor(navy)
+    .text(sName, gTxtX, gTxtY, { width: snW, align: 'left', lineBreak: false });
+  if (d.schoolAddress) {
+    doc.font('Helvetica').fontSize(4.5).fillColor(navy)
+      .text(d.schoolAddress, gTxtX, gTxtY + snFs + 1.5, { width: snW, align: 'left', lineBreak: false });
+  }
+
+  // ── "STUDENT CARD" heading ──
+  const headingY = y + h * 0.402; // 43/107
+  doc.font('Helvetica-Bold').fontSize(14).fillColor(navy)
+    .text('STUDENT CARD', x + w * 0.047, headingY, { lineBreak: false });
+
+  // ── Bold-label field rows ──
+  const lblX = x + w * 0.047; // 8/170
+  const valX = x + w * 0.276; // 47/170
+  // field values stay left of photo (photo starts at ~x+w*0.612)
+  const valW = x + w * 0.600 - valX;
+  const fFs = 6.5;
+  const fLH = h * 0.084; // 9/107
+  let fy = y + h * 0.486; // 52/107
+
+  [
+    ['STUDENT NAME', titleCase(d.name || 'N/A')],
+    ['STUDENT ID',   d.studentId || d.roll || 'N/A'],
+    ['D.O.B',        formatDate(d.dob)],
+    ['HOME ADDRESS', d.address || ''],
+  ].forEach(([lbl, val]) => {
+    doc.font('Helvetica-Bold').fontSize(fFs).fillColor(navy)
+      .text(lbl, lblX, fy, { lineBreak: false });
+    const vFs = fitText(doc, ': ' + String(val), valW, 'Helvetica', fFs, 5);
+    doc.font('Helvetica').fontSize(vFs).fillColor(navy)
+      .text(': ' + String(val), valX, fy, { lineBreak: false, width: valW });
+    fy += fLH;
+  });
+
+  // ── Photo right — large rounded corners, thick navy border ──
+  const pBorderW = 2;
+  const photoW = w * 0.353; // 60/170
+  const photoH = h * 0.505; // 54/107
+  const photoX = x + w * 0.612; // 104/170
+  const photoY = y + h * 0.262; // 28/107  — sits at wave edge
+  doc.roundedRect(photoX - pBorderW, photoY - pBorderW, photoW + pBorderW * 2, photoH + pBorderW * 2, 6)
+    .lineWidth(pBorderW).strokeColor(navy).stroke();
+  drawSquarePhoto(doc, d.profileImage, photoX, photoY, photoW, photoH, 6);
+
+  // ── Barcode — white bars inside the bottom teal band ──
+  const barcodeY = y + h * 0.794; // 85/107
+  const barcodeH = h * 0.084;     // 9/107
+  // [barWidth, gapAfter] in SVG 170-unit scale
+  const barData = [
+    [1.5,1],[2,1],[1,0.5],[2.5,1],[1,0.5],[2,1],
+    [1.5,0.5],[1,0.5],[2.5,1],[1,0.5],[2,1],
+    [1.5,0.5],[1,0.5],[2.5,1],[1,0.5],[2,1],[1.5,0.5],[2.5,0],
+  ];
+  let bx = x + 8 * bScale; // starts at SVG x=8
+  barData.forEach(([barW, gapW]) => {
+    doc.rect(bx, barcodeY, barW * bScale, barcodeH).fill('#ffffff');
+    bx += (barW + gapW) * bScale;
+  });
+}
+
 // ── Placeholder fallback template ─────────────────────────────────────────────
 
 function tPlaceholder(doc, x, y, w, h, d) {
@@ -1287,9 +1407,9 @@ function tPlaceholder(doc, x, y, w, h, d) {
 function drawTemplate(doc, x, y, w, h, tpl, d) {
   console.log('✏️ DRAWING TEMPLATE:', { tpl, role: d.role });
   const map = {
-
     'student-teal-horizontal': tStudentTeal,
     'student-navy-horizontal': tStudentNavy,
+    'student-wave-navy': tStudentWaveNavy,
     'teacher-cream-horizontal': tTeacherCream,
     'security-red-vertical': tSecurityRed,
     'staff-navy-wave': tStaffNavyWave,
