@@ -207,53 +207,83 @@ export const deleteChapter = async (req, res) => {
 
 export const generatePaper = async (req, res) => {
   try {
-    const { bookId, chapterIds, examTitle, className, subjectName, timeAllowed, totalMarks, mcqCount, shortCount, longCount } = req.body;
+    const {
+      bookId, chapterIds, examTitle, className, subjectName, timeAllowed, totalMarks,
+      // Manual selection mode
+      selectedMcqs: manualMcqs,
+      selectedShortQuestions: manualShort,
+      selectedLongQuestions: manualLong,
+      mcqMarks, shortMarks, longMarks,
+      // Legacy random mode
+      mcqCount, shortCount, longCount
+    } = req.body;
     const teacherId = req.staffDbId?.toString();
     const schoolId  = req.schoolId?.toString();
 
     if (!bookId || !examTitle?.trim()) return res.status(400).json({ error: 'bookId and examTitle are required' });
     if (!Array.isArray(chapterIds) || !chapterIds.length) return res.status(400).json({ error: 'Select at least one chapter' });
 
-    const mcqs_  = parseInt(mcqCount)  || 0;
-    const short_ = parseInt(shortCount) || 0;
-    const long_  = parseInt(longCount)  || 0;
+    const mcqMarks_   = parseInt(mcqMarks)   || 1;
+    const shortMarks_ = parseInt(shortMarks) || 3;
+    const longMarks_  = parseInt(longMarks)  || 5;
 
-    const chapters = await Chapter.find({ _id: { $in: chapterIds }, bookId, schoolId });
-    if (!chapters.length) return res.status(404).json({ error: 'No chapters found for this book' });
+    let finalMcqs, finalShort, finalLong;
+    let mode = 'random';
 
-    const allMcqs  = chapters.flatMap(c => c.mcqs);
-    const allShort = chapters.flatMap(c => c.shortQuestions);
-    const allLong  = chapters.flatMap(c => c.longQuestions);
+    // Manual selection: use the questions the teacher explicitly chose
+    if (manualMcqs !== undefined || manualShort !== undefined || manualLong !== undefined) {
+      mode       = 'manual';
+      finalMcqs  = Array.isArray(manualMcqs)  ? manualMcqs  : [];
+      finalShort = Array.isArray(manualShort) ? manualShort : [];
+      finalLong  = Array.isArray(manualLong)  ? manualLong  : [];
+    } else {
+      // Legacy: pick randomly from chapters by count
+      const mcqs_  = parseInt(mcqCount)   || 0;
+      const short_ = parseInt(shortCount) || 0;
+      const long_  = parseInt(longCount)  || 0;
 
-    const selectedMcqs  = pickRandom(allMcqs,  mcqs_);
-    const selectedShort = pickRandom(allShort, short_);
-    const selectedLong  = pickRandom(allLong,  long_);
+      const chapters = await Chapter.find({ _id: { $in: chapterIds }, bookId, schoolId });
+      if (!chapters.length) return res.status(404).json({ error: 'No chapters found for this book' });
 
-    const calcTotalMarks = parseInt(totalMarks) || (mcqs_ * 1 + short_ * 3 + long_ * 5);
+      finalMcqs  = pickRandom(chapters.flatMap(c => c.mcqs),            mcqs_);
+      finalShort = pickRandom(chapters.flatMap(c => c.shortQuestions), short_);
+      finalLong  = pickRandom(chapters.flatMap(c => c.longQuestions),  long_);
+    }
+
+    const calcTotalMarks = parseInt(totalMarks) ||
+      (finalMcqs.length * mcqMarks_ + finalShort.length * shortMarks_ + finalLong.length * longMarks_);
 
     const exam = await GeneratedExam.create({
       teacherId, schoolId, bookId, chapterIds,
-      examTitle:   examTitle.trim(),
-      className:   className   || '',
-      subjectName: subjectName || '',
-      timeAllowed: timeAllowed || '1 Hour',
-      totalMarks:  calcTotalMarks,
-      mcqs:           selectedMcqs,
-      shortQuestions: selectedShort,
-      longQuestions:  selectedLong
+      examTitle:     examTitle.trim(),
+      className:     className   || '',
+      subjectName:   subjectName || '',
+      timeAllowed:   timeAllowed || '1 Hour',
+      totalMarks:    calcTotalMarks,
+      selectionMode: mode,
+      mcqMarks:      mcqMarks_,
+      shortMarks:    shortMarks_,
+      longMarks:     longMarks_,
+      mcqs:           finalMcqs,
+      shortQuestions: finalShort,
+      longQuestions:  finalLong
     });
 
     return res.json({
       success: true,
-      examId:      exam._id,
-      examTitle:   exam.examTitle,
-      className:   exam.className,
-      subjectName: exam.subjectName,
-      timeAllowed: exam.timeAllowed,
-      totalMarks:  exam.totalMarks,
-      mcqs:           selectedMcqs,
-      shortQuestions: selectedShort,
-      longQuestions:  selectedLong
+      examId:        exam._id,
+      examTitle:     exam.examTitle,
+      className:     exam.className,
+      subjectName:   exam.subjectName,
+      timeAllowed:   exam.timeAllowed,
+      totalMarks:    exam.totalMarks,
+      selectionMode: exam.selectionMode,
+      mcqMarks:      exam.mcqMarks,
+      shortMarks:    exam.shortMarks,
+      longMarks:     exam.longMarks,
+      mcqs:           finalMcqs,
+      shortQuestions: finalShort,
+      longQuestions:  finalLong
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -295,6 +325,10 @@ export const regeneratePaper = async (req, res) => {
       subjectName: exam.subjectName,
       timeAllowed: exam.timeAllowed,
       totalMarks:  exam.totalMarks,
+      selectionMode: exam.selectionMode || 'random',
+      mcqMarks:    exam.mcqMarks   || 1,
+      shortMarks:  exam.shortMarks || 3,
+      longMarks:   exam.longMarks  || 5,
       mcqs:           exam.mcqs,
       shortQuestions: exam.shortQuestions,
       longQuestions:  exam.longQuestions
@@ -312,7 +346,7 @@ export const getExamHistory = async (req, res) => {
     const schoolId  = req.schoolId?.toString();
     const exams = await GeneratedExam.find({ teacherId, schoolId })
       .sort({ createdAt: -1 })
-      .select('_id examTitle className subjectName totalMarks timeAllowed createdAt mcqs shortQuestions longQuestions');
+      .select('_id examTitle className subjectName totalMarks timeAllowed createdAt mcqs shortQuestions longQuestions mcqMarks shortMarks longMarks selectionMode');
     return res.json(exams);
   } catch (err) {
     return res.status(500).json({ error: err.message });
