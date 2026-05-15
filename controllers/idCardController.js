@@ -489,16 +489,6 @@ function tStudentVBlue(doc, x, y, w, h, d) {
   drawSignature(doc, d.principalName, sigX, sigY, sigW, '#333333');
 }
 
-// ── TEMPLATE 1: Student Vertical — PROFESSIONAL ───────────────────────────────
-function tStudentVBlue(doc, x, y, w, h, d) {
-  const p = resolveColor(d.primaryColor, '#1a9e8f');
-  const dk = darken(p, 0.25);
-  const lt = lighten(p, 0.85);
-
-  // Sync with tStudentTeal logic as it represents the new standard
-  tStudentTeal(doc, x, y, w, h, d);
-}
-
 // ── TEMPLATE 2: Student Navy-Gold Horizontal (Image 2) ───────────────────────
 // Dark navy bg, gold right accent stripe, circular photo left, logo+fields right,
 // name at bottom-left, "Authorized by Registrar" badge bottom-right
@@ -1437,18 +1427,15 @@ export const getClassesForIDCard = async (req, res) => {
     let classes = await Class.find({ isActive: { $ne: false } }).select('className section academicYear grade').lean();
 
     // Fallback to Main DB if Tenant DB has no classes
-    if (classes.length === 0) {
-      console.log('[IDCard] No classes in tenant DB, falling back to main DB');
-      classes = await MainClass.find({ schoolId, isActive: { $ne: false } }).select('className section academicYear grade').lean();
-      // If we fall back to Main DB for classes, we should use Main DB for student counts too
-      Student = MainStudent;
-    }
+    // Fallback: if tenant DB has no classes, just return empty
+if (classes.length === 0) {
+  console.log('[IDCard] No classes in tenant DB');
+}
 
     const classesWithCount = await Promise.all(classes.map(async (cls) => {
       const studentCount = await Student.countDocuments({
         classId: cls._id,
         status: { $ne: 'inactive' },
-        ...(Student === MainStudent ? { schoolId } : {})
       });
       return { ...cls, studentCount };
     }));
@@ -1601,7 +1588,7 @@ function buildHtmlData(p, c, school, photoUri, logoUri, primaryColor, role, staf
     roll: p.rollNumber || '',
     studentId: p.studentId || '',
     staffId: p.staffId || '',
-    designation: (role === 'staff' && staffType) ? staffType : (p.designation || ''),
+    designation: (role === 'staff' && staffType) ? staffType : (p.designation || (role === 'teacher' ? 'Teacher' : '')),
     contact: p.contact || p.phone || '',
     joinDate: formatDate(p.joinDate || p.joiningDate),
     bloodGroup: p.bloodGroup || '',
@@ -1612,6 +1599,7 @@ function buildHtmlData(p, c, school, photoUri, logoUri, primaryColor, role, staf
     session: c?.academicYear || '2025-2026',
     position: position || '',
     principalName: principalNameOverride || school?.principalName || school?.principal || 'Principal',
+     qrCode: null,
   };
 }
 
@@ -1644,6 +1632,72 @@ function buildData(p, c, school, profileBuffer, logoBuffer, primaryColor, role, 
     principalName: principalNameOverride || school?.principalName || school?.principal || 'Principal',
   };
 }
+
+export const getIDCardTemplates = async (req, res) => {
+  try {
+    const templates = {
+      student: [
+        { id: 'student-teal-horizontal', name: 'Teal Classic', type: 'Horizontal' },
+        { id: 'student-wave-navy', name: 'Wave Navy', type: 'Horizontal' },
+        { id: 'student-navy-horizontal', name: 'Navy Gold', type: 'Horizontal' },
+        { id: 'student-darknavy-horizontal', name: 'Dark Navy Gold', type: 'Horizontal' },
+        { id: 'student-lavender-horizontal', name: 'Soft Lavender', type: 'Horizontal' },
+      ],
+      teacher: [
+        { id: 'teacher-cream-horizontal', name: 'Cream Navy', type: 'Horizontal' },
+        { id: 'teacher-creamy-horizontal', name: 'Creamy Navy', type: 'Horizontal' },
+        { id: 'teacher-blue-horizontal', name: 'Blue Classic', type: 'Horizontal' },
+        { id: 'teacher-golden-horizontal', name: 'Golden Prestige', type: 'Horizontal' },
+        { id: 'teacher-tealmodern-horizontal', name: 'Teal Modern', type: 'Horizontal' },
+      ],
+      security: [
+        { id: 'security-red-vertical', name: 'Red Authority', type: 'Vertical' },
+      ],
+      staff: [
+        { id: 'staff-navy-wave', name: 'Navy Wave', type: 'Horizontal' },
+        { id: 'staff-blue-teal-vertical', name: 'Blue Teal', type: 'Vertical' },
+      ],
+      position_holder: [
+        { id: 'position-holder-green', name: 'Elite Green', type: 'Vertical' },
+      ],
+      class_monitor: [
+        { id: 'class-monitor-blue', name: 'Diagonal Blue', type: 'Horizontal' },
+      ],
+    };
+
+    const defaults = {
+      'student-teal-horizontal': '#1a9e8f',
+      'student-navy-horizontal': '#1a2744',
+      'student-wave-navy': '#3a95b0',
+      'student-darknavy-horizontal': '#c9a227',
+      'student-lavender-horizontal': '#6c63d5',
+      'teacher-cream-horizontal': '#1a2744',
+      'teacher-creamy-horizontal': '#1a2744',
+      'teacher-blue-horizontal': '#2b6cb0',
+      'teacher-golden-horizontal': '#c9a227',
+      'teacher-tealmodern-horizontal': '#17b3c8',
+      'security-red-vertical': '#c0392b',
+      'staff-navy-wave': '#1a2744',
+      'staff-blue-teal-vertical': '#2b6cb0',
+      'position-holder-green': '#1b8a4a',
+      'class-monitor-blue': '#1a2744',
+    };
+
+    const allTemplates = Object.values(templates).flat();
+
+    res.json({
+      success: true,
+      data: {
+        roles: templates,
+        defaults,
+        allTemplates,
+      },
+    });
+  } catch (error) {
+    console.error('[IDCard] getIDCardTemplates error:', error);
+    res.status(500).json({ success: false, message: 'Failed to load ID card templates' });
+  }
+};
 
 export const previewIDCard = async (req, res) => {
   try {

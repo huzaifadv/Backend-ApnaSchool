@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teacher ID Card - Teal Modern</title>
+  <style>
+    :root {
+      --primary-color: <%= locals.primaryColor || '#17b3c8' %>;
+      --darken-color:  <%= locals.darkenColor  || '#0e8fa0' %>;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { width:85.6mm; height:54mm; overflow:hidden; font-family:Arial,Helvetica,sans-serif; }
+    .card { position:relative; width:85.6mm; height:54mm; background:#ffffff; overflow:hidden; }
+
+    /* LOGO BOX */
+    .logo-box {
+      position:absolute; top:0; left:0; width:40mm; height:14mm;
+      background:var(--primary-color);
+      display:flex; align-items:center; gap:2mm; padding:0 2.5mm; z-index:3;
+    }
+    .logo-icon {
+      flex-shrink:0; width:9mm; height:9mm;
+      background:rgba(255,255,255,0.22); border-radius:1.5mm;
+      display:flex; align-items:center; justify-content:center; overflow:hidden;
+    }
+    .logo-icon img { width:100%; height:100%; object-fit:contain; }
+    .logo-texts { display:flex; flex-direction:column; }
+    .logo-name {
+      font-size:6.5pt; font-weight:800; color:#fff;
+      text-transform:uppercase; letter-spacing:0.3pt;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:26mm;
+    }
+    .logo-tagline { font-size:3.8pt; color:rgba(255,255,255,0.82); letter-spacing:0.4pt; white-space:nowrap; }
+
+    /* STACKED BARS top-right */
+    .tr-bar-1 { position:absolute; top:0;     right:0; width:13mm;  height:3.5mm; background:var(--primary-color); z-index:3; }
+    .tr-bar-2 { position:absolute; top:4.5mm; right:0; width:9mm;   height:2.8mm; background:var(--primary-color); z-index:3; }
+    .tr-bar-3 { position:absolute; top:8.4mm; right:0; width:5.5mm; height:2.2mm; background:var(--primary-color); z-index:3; }
+
+    /* STACKED BARS bottom-right */
+    .br-bar-1 { position:absolute; bottom:0;     right:0; width:13mm;  height:3.5mm; background:var(--primary-color); z-index:3; }
+    .br-bar-2 { position:absolute; bottom:4.5mm; right:0; width:9mm;   height:2.8mm; background:var(--primary-color); z-index:3; }
+    .br-bar-3 { position:absolute; bottom:8.4mm; right:0; width:5.5mm; height:2.2mm; background:var(--primary-color); z-index:3; }
+
+    /* PHOTO — smaller (16mm×20mm) pushed down to 18mm */
+    .photo {
+      position:absolute; top:18mm; left:4.5mm;
+      width:16mm; height:20mm;
+      border:1.5px solid var(--primary-color);
+      background:#e8e8e8; overflow:hidden; z-index:2;
+    }
+    .photo::before {
+      content:''; position:absolute; top:0; left:0; right:0;
+      height:1mm; background:var(--primary-color); z-index:1;
+    }
+    .photo img { width:100%; height:100%; object-fit:cover; }
+    .photo__placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+
+    /* NAME + FIELDS — pushed down to 19mm */
+    .info { position:absolute; top:19mm; left:24mm; right:15mm; }
+    .info__name {
+      font-size:9pt; font-weight:800; color:var(--primary-color);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      line-height:1; margin-bottom:2.5mm;
+    }
+
+    /* FIELDS */
+    .field { display:flex; align-items:baseline; margin-bottom:1.5mm; }
+    .field__label { flex-shrink:0; width:15mm; font-size:5pt; font-weight:600; color:#555; }
+    .field__colon { flex-shrink:0; font-size:5pt; color:#bbb; margin-right:1.5mm; }
+    .field__value { font-size:5pt; font-weight:700; color:#111; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* BOTTOM */
+    .bottom {
+      position:absolute; bottom:2mm; left:2.5mm; right:15mm;
+      display:flex; align-items:flex-end; justify-content:space-between;
+    }
+    .qr { width:11mm; height:11mm; flex-shrink:0; }
+    .qr svg { width:100%; height:100%; }
+
+    /* SIGNATURE */
+    .signature { text-align:center; width:26mm; }
+    .signature__name { font-family:Georgia,'Times New Roman',serif; font-size:5.5pt; font-style:italic; font-weight:700; color:#222; }
+    .signature__line { margin:1mm 0 0.5mm; border-top:0.5px solid #aaa; }
+    .signature__title { font-size:3.2pt; color:#999; letter-spacing:0.5pt; text-transform:uppercase; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="logo-box">
+    <div class="logo-icon">
+      <% if (locals.logo) { %>
+        <img src="<%= locals.logo %>" alt="Logo">
+      <% } else { %>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h5M8 16h6"/>
+        </svg>
+      <% } %>
+    </div>
+    <div class="logo-texts">
+      <span class="logo-name"><%= locals.schoolName || 'SCHOOL NAME' %></span>
+      <span class="logo-tagline"><%= locals.schoolAddress || 'Address, City' %></span>
+    </div>
+  </div>
+
+  <div class="tr-bar-1"></div><div class="tr-bar-2"></div><div class="tr-bar-3"></div>
+  <div class="br-bar-1"></div><div class="br-bar-2"></div><div class="br-bar-3"></div>
+
+  <div class="photo">
+    <% if (locals.photo) { %>
+      <img src="<%= locals.photo %>" alt="Teacher Photo">
+    <% } else { %>
+      <div class="photo__placeholder">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.3">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="info">
+    <div class="info__name"><%= locals.name || 'Teacher Name' %></div>
+    <div class="field">
+      <span class="field__label">Designation</span>
+      <span class="field__colon">:</span>
+      <span class="field__value"><%= locals.designation || 'N/A' %></span>
+    </div>
+    <div class="field">
+      <span class="field__label">Employee Id</span>
+      <span class="field__colon">:</span>
+      <span class="field__value"><%= locals.staffId || 'N/A' %></span>
+    </div>
+    <div class="field">
+      <span class="field__label">Class</span>
+      <span class="field__colon">:</span>
+      <span class="field__value"><%= locals.cls || 'N/A' %></span>
+    </div>
+    <div class="field">
+      <span class="field__label">Joining Date</span>
+      <span class="field__colon">:</span>
+      <span class="field__value"><%= locals.joinDate || 'N/A' %></span>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="qr">
+      <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2"    y="2"    width="8" height="8" fill="none" stroke="<%= locals.primaryColor||'#17b3c8' %>" stroke-width="0.8"/>
+        <rect x="3.5"  y="3.5"  width="5" height="5" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="18"   y="2"    width="8" height="8" fill="none" stroke="<%= locals.primaryColor||'#17b3c8' %>" stroke-width="0.8"/>
+        <rect x="19.5" y="3.5"  width="5" height="5" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="2"    y="18"   width="8" height="8" fill="none" stroke="<%= locals.primaryColor||'#17b3c8' %>" stroke-width="0.8"/>
+        <rect x="3.5"  y="19.5" width="5" height="5" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="12" y="4"  width="2" height="2" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="14" y="8"  width="2" height="2" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="18" y="14" width="2" height="2" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="22" y="18" width="2" height="2" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="18" y="22" width="2" height="2" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="22" y="14" width="2" height="2" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+        <rect x="14" y="18" width="2" height="2" fill="<%= locals.primaryColor||'#17b3c8' %>"/>
+      </svg>
+    </div>
+    <div class="signature">
+      <div class="signature__name"><%= locals.principalName || 'Principal' %></div>
+      <div class="signature__line"></div>
+      <div class="signature__title">Principal Signature</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

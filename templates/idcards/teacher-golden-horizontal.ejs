@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teacher ID Card</title>
+
+  <style>
+    :root {
+      --primary-color: <%= locals.primaryColor || '#C08020' %>;
+      --darken-color: <%= locals.darkenColor || '#A06010' %>;
+      --cream: #FDF6E3;
+      --cream-dark: #F5EBD0;
+      --cream-border: #E8D8A8;
+      --text-dark: #3A2E1A;
+      --text-mid: #6B5B35;
+      --red-value: #cc0000;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* ============================================================
+       CARD CONTAINER (CR80: 85.6mm × 54mm)
+       ============================================================ */
+    body {
+      width: 85.6mm;
+      height: 54mm;
+      overflow: hidden;
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 85.6mm;
+      height: 54mm;
+      background: var(--cream);
+      overflow: hidden;
+      border-radius: 2.5mm;
+      border: 1.5px solid var(--primary-color);
+    }
+
+    /* ============================================================
+       DECORATIVE CORNER ACCENT LINES (top-left, bottom-right)
+       ============================================================ */
+    .card::before,
+    .card::after {
+      content: '';
+      position: absolute;
+      width: 6mm;
+      height: 6mm;
+      border-color: var(--primary-color);
+      border-style: solid;
+      opacity: 0.5;
+      z-index: 10;
+    }
+    .card::before {
+      top: 1.5mm;
+      left: 1.5mm;
+      border-width: 1px 0 0 1px;
+    }
+    .card::after {
+      bottom: 1.5mm;
+      right: 1.5mm;
+      border-width: 0 1px 1px 0;
+    }
+
+    /* ============================================================
+       AMBER HEADER BAND
+       ============================================================ */
+    .header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 14mm;
+      display: flex;
+      align-items: center;
+      gap: 2.5mm;
+      padding: 0 3mm;
+      background: var(--primary-color);
+      border-radius: 2.5mm 2.5mm 0 0;
+    }
+
+    /* Subtle diagonal stripe texture on header */
+    .header::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        135deg,
+        rgba(255,255,255,0.04) 0px,
+        rgba(255,255,255,0.04) 1px,
+        transparent 1px,
+        transparent 8px
+      );
+      border-radius: inherit;
+      pointer-events: none;
+    }
+
+    .header__logo {
+      position: relative;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 9mm;
+      height: 9mm;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 1.5mm;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    .header__logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .header__logo svg {
+      width: 5mm;
+      height: 5mm;
+    }
+
+    .header__text {
+      flex: 1;
+      z-index: 1;
+    }
+
+    .header__school-name {
+      font-size: 7.5pt;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .header__school-address {
+      margin-top: 0.8mm;
+      font-size: 4pt;
+      color: rgba(255,255,255,0.75);
+      letter-spacing: 0.02em;
+    }
+
+    /* ============================================================
+       STAFF ID BADGE PILL (top-right of content area)
+       ============================================================ */
+    .badge {
+      position: absolute;
+      top: 16mm;
+      left: 23mm;
+      display: inline-block;
+      padding: 0.6mm 2.5mm;
+      border: 1px solid var(--primary-color);
+      border-radius: 10mm;
+      font-size: 4pt;
+      font-weight: 700;
+      color: var(--primary-color);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: transparent;
+    }
+
+    /* ============================================================
+       TEACHER PHOTO (left, below header)
+       ============================================================ */
+    .photo {
+      position: absolute;
+      top: 16.5mm;
+      left: 3.5mm;
+      width: 16mm;
+      height: 21mm;
+      background: var(--cream-dark);
+      border: 1.5px solid var(--primary-color);
+      border-radius: 1mm;
+      overflow: hidden;
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo__placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: var(--cream-dark);
+    }
+
+    /* ============================================================
+       TEACHER INFO (right of photo)
+       ============================================================ */
+    .info {
+      position: absolute;
+      top: 20mm;
+      left: 23mm;
+      right: 3mm;
+    }
+
+    .info__name {
+      font-size: 10pt;
+      font-weight: 800;
+      color: var(--text-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+      margin-bottom: 1.5mm;
+    }
+
+    .info__divider {
+      margin-bottom: 2mm;
+      border: none;
+      border-top: 1px solid var(--cream-border);
+    }
+
+    /* ============================================================
+       INFO FIELD ROWS
+       ============================================================ */
+    .field {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 1.1mm;
+      gap: 0;
+    }
+
+    .field__dot {
+      flex-shrink: 0;
+      width: 1.5mm;
+      height: 1.5mm;
+      border-radius: 50%;
+      background: var(--primary-color);
+      margin-right: 1.2mm;
+      margin-bottom: 0.1mm;
+      align-self: center;
+    }
+
+    .field__label {
+      flex-shrink: 0;
+      width: 16mm;
+      font-size: 5pt;
+      font-weight: 600;
+      color: var(--text-mid);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .field__value {
+      font-size: 5.5pt;
+      font-weight: 700;
+      color: var(--text-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ============================================================
+       BOTTOM ROW (QR + Signature)
+       ============================================================ */
+    .bottom {
+      position: absolute;
+      bottom: 2mm;
+      left: 3mm;
+      right: 3mm;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    /* ============================================================
+       QR CODE AREA
+       ============================================================ */
+    .qr {
+      width: 11mm;
+      height: 11mm;
+    }
+
+    .qr svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ============================================================
+       PRINCIPAL SIGNATURE
+       ============================================================ */
+    .signature {
+      text-align: right;
+    }
+
+    .signature__name {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 6pt;
+      font-style: italic;
+      font-weight: 700;
+      color: var(--text-dark);
+      letter-spacing: 0.02em;
+    }
+
+    .signature__line {
+      margin: 1mm 0 0.5mm;
+      border-top: 0.5px solid var(--text-mid);
+    }
+
+    .signature__title {
+      font-size: 3.5pt;
+      color: var(--text-mid);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    /* ============================================================
+       BOTTOM CREAM BAND ACCENT
+       ============================================================ */
+    .bottom-band {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2mm;
+      background: var(--primary-color);
+      border-radius: 0 0 2.5mm 2.5mm;
+      opacity: 0.18;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+
+    <!-- Header: Logo + School Name -->
+    <div class="header">
+      <div class="header__logo">
+        <% if (locals.logo) { %>
+          <img src="<%= locals.logo %>" alt="School Logo">
+        <% } else { %>
+          <!-- Default stacked-layers icon -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
+        <% } %>
+      </div>
+
+      <div class="header__text">
+        <div class="header__school-name">
+          <%= locals.schoolName || 'School Name' %>
+        </div>
+        <% if (locals.schoolAddress) { %>
+          <div class="header__school-address">
+            <%= locals.schoolAddress %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Staff ID Badge Pill -->
+    <div class="badge">Staff ID</div>
+
+    <!-- Teacher Photo -->
+    <div class="photo">
+      <% if (locals.photo) { %>
+        <img src="<%= locals.photo %>" alt="Teacher Photo">
+      <% } else { %>
+        <div class="photo__placeholder">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C08020" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- Teacher Info -->
+    <div class="info">
+      <div class="info__name"><%= locals.name || 'Teacher Name' %></div>
+      <div class="info__divider"></div>
+
+      <div class="field">
+        <div class="field__dot"></div>
+        <span class="field__label">EMP ID</span>
+        <span class="field__value"><%= locals.staffId || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <div class="field__dot"></div>
+        <span class="field__label">Designation</span>
+        <span class="field__value"><%= locals.designation || 'Teacher' %></span>
+      </div>
+
+      <div class="field">
+        <div class="field__dot"></div>
+        <span class="field__label">Class</span>
+        <span class="field__value"><%= locals.cls || 'N/A' %></span>
+      </div>
+
+      <div class="field">
+        <div class="field__dot"></div>
+        <span class="field__label">Joining</span>
+        <span class="field__value"><%= locals.joinDate || 'N/A' %></span>
+      </div>
+    </div>
+
+    <!-- Bottom Row: QR + Signature -->
+    <div class="bottom">
+      <div class="qr">
+        <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+          <!-- Outer frame -->
+          <rect width="28" height="28" fill="none" stroke="<%= locals.primaryColor || '#C08020' %>" stroke-width="1"/>
+          <!-- Top-left finder -->
+          <rect x="2" y="2" width="8" height="8" fill="none" stroke="<%= locals.primaryColor || '#C08020' %>" stroke-width="0.8"/>
+          <rect x="3.5" y="3.5" width="5" height="5" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <!-- Top-right finder -->
+          <rect x="18" y="2" width="8" height="8" fill="none" stroke="<%= locals.primaryColor || '#C08020' %>" stroke-width="0.8"/>
+          <rect x="19.5" y="3.5" width="5" height="5" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <!-- Bottom-left finder -->
+          <rect x="2" y="18" width="8" height="8" fill="none" stroke="<%= locals.primaryColor || '#C08020' %>" stroke-width="0.8"/>
+          <rect x="3.5" y="19.5" width="5" height="5" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <!-- Data dots -->
+          <rect x="12" y="4"  width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <rect x="14" y="8"  width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <rect x="12" y="12" width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <rect x="18" y="12" width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <rect x="22" y="18" width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <rect x="18" y="22" width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <rect x="14" y="22" width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+          <rect x="22" y="14" width="2" height="2" fill="<%= locals.primaryColor || '#C08020' %>"/>
+        </svg>
+      </div>
+
+      <div class="signature">
+        <div class="signature__name"><%= locals.principalName || 'Principal' %></div>
+        <div class="signature__line"></div>
+        <div class="signature__title">Principal Signature</div>
+      </div>
+    </div>
+
+    <!-- Bottom accent band -->
+    <div class="bottom-band"></div>
+
+  </div>
+</body>
+</html>

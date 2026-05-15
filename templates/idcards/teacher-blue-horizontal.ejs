@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teacher ID Card - Blue Center</title>
+  <style>
+    :root {
+      --primary:       <%= locals.primaryColor || '#1A5CB0' %>;
+      --primary-dark:  <%= locals.darkenColor  || '#0F3F80' %>;
+      --primary-light: #E8F0FB;
+      --cream:         #F0F5FF;
+      --border:        #C8D8EE;
+      --text-dark:     #0D2B5E;
+      --text-mid:      #4A6080;
+      --text-light:    #8AA0C0;
+
+      /* Layout constants — easy to tweak */
+      --card-w:    85.6mm;
+      --card-h:    54mm;
+      --hdr-h:     15mm;   /* blue header height — moved up */
+      --photo-d:   12mm;   /* photo circle diameter — slightly smaller */
+      --photo-top: 9mm;    /* photo starts higher */
+      --ftr-h:     10mm;   /* blue footer height */
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width:  var(--card-w);
+      height: var(--card-h);
+      overflow: hidden;
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      background: var(--cream);
+    }
+
+    /* ── CARD ── */
+    .card {
+      position: relative;
+      width:  var(--card-w);
+      height: var(--card-h);
+      background: var(--cream);
+      overflow: hidden;
+    }
+
+    /* ── HEADER (blue top band) ── */
+    .header {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: var(--hdr-h);
+      background: var(--primary);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 1.5mm;
+    }
+
+    .header__logo-row {
+      display: flex;
+      align-items: center;
+      gap: 1.8mm;
+      margin-bottom: 0.2mm;
+    }
+
+    .header__logo-box {
+      width:  5.5mm;
+      height: 5.5mm;
+      border: 1px solid #f4c542;
+      border-radius: 0.8mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+   .header__logo-box img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+}
+
+    .header__school-name {
+      font-size: 7.5pt;
+      font-weight: 800;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .header__school-address {
+      font-size: 3.8pt;
+      color: rgba(255,255,255,0.65);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── PHOTO ── */
+    /*  Sits centered; top = var(--photo-top)
+        bottom of photo = photo-top + photo-d = 11 + 14 = 25mm
+        header ends at 18mm → photo straddles the boundary correctly  */
+    .photo-wrap {
+      position: absolute;
+      top:  var(--photo-top);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+
+      width:  var(--photo-d);
+      height: var(--photo-d);
+      border-radius: 50%;
+      border: 1.8px solid #fff;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
+      background: #d6e4f5;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .photo-wrap img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    /* ── WHITE BODY ── */
+    /* starts right below header */
+    .body {
+      position: absolute;
+      top:    var(--hdr-h);
+      bottom: var(--ftr-h);
+      left: 0; right: 0;
+      background: var(--cream);
+    }
+
+    /* ── NAME BLOCK ──
+       photo bottom = 9 + 12 = 21mm; name sits ~2.5mm below that → top ≈ 23.5mm from card top
+       relative to body (starts at 15mm): 23.5 - 15 = 8.5mm                               */
+    .name-block {
+      position: absolute;
+      top: 8.5mm;
+      left: 0; right: 0;
+      text-align: center;
+      padding: 0 3mm;
+    }
+
+    .teacher-name {
+      font-size: 8pt;
+      font-weight: 800;
+      color: var(--text-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.1;
+    }
+
+    /* faculty role removed */
+
+    /* ── DIVIDER ── */
+    .divider {
+      position: absolute;
+      top: 12mm;
+      left: 4mm; right: 4mm;
+      border-top: 0.5px solid var(--border);
+    }
+
+    /* ── FIELDS GRID ── */
+    .fields {
+      position: absolute;
+      top: 13mm;
+      left: 4mm; right: 4mm;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      row-gap: 1.6mm;
+      column-gap: 2mm;
+    }
+
+    .field__label {
+      font-size: 3.5pt;
+      font-weight: 700;
+      color: var(--text-light);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4mm;
+    }
+
+    .field__value {
+      font-size: 5pt;
+      font-weight: 700;
+      color: var(--text-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: var(--ftr-h);
+      background: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 3.5mm;
+    }
+
+    /* ── QR ── */
+    .qr {
+      width: 7.5mm;
+      height: 7.5mm;
+      flex-shrink: 0;
+    }
+    .qr svg { width: 100%; height: 100%; }
+
+    /* ── SIGNATURE ── */
+    .signature { text-align: right; }
+
+    .signature__name {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 5.5pt;
+      font-style: italic;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .signature__line {
+      margin: 0.8mm 0 0.4mm;
+      border-top: 0.4mm solid rgba(255,255,255,0.35);
+    }
+
+    .signature__title {
+      font-size: 3pt;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header__logo-row">
+      <div class="header__logo-box">
+        <% if (locals.logo) { %>
+          <img src="<%= locals.logo %>" alt="Logo">
+        <% } else { %>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f4c542" stroke-width="2.5">
+            <path d="M12 3L2 9l10 6 10-6-10-6z"/>
+          </svg>
+        <% } %>
+      </div>
+      <div class="header__school-name"><%= locals.schoolName || 'SCHOOL NAME' %></div>
+    </div>
+    <div class="header__school-address"><%= locals.schoolAddress || 'Address, City' %></div>
+  </div>
+
+  <!-- PHOTO (overlaps header/body boundary) -->
+  <div class="photo-wrap">
+    <% if (locals.photo) { %>
+     <img src="<%= locals.photo %>" alt="Teacher Photo">
+    <% } else { %>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7A9AC0" stroke-width="1.4">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    <% } %>
+  </div>
+
+  <!-- WHITE BODY -->
+  <div class="body">
+    <!-- NAME BLOCK -->
+    <div class="name-block">
+      <div class="teacher-name"><%= locals.name || 'Teacher Name' %></div>
+    </div>
+
+    <!-- DIVIDER -->
+    <div class="divider"></div>
+
+    <!-- FIELDS -->
+    <div class="fields">
+      <div>
+        <div class="field__label">Employee ID</div>
+        <div class="field__value"><%= locals.staffId || 'N/A' %></div>
+      </div>
+      <div>
+        <div class="field__label">Designation</div>
+        <div class="field__value"><%= locals.designation || 'N/A' %></div>
+      </div>
+      <div>
+        <div class="field__label">Class</div>
+        <div class="field__value"><%= locals.cls || 'N/A' %></div>
+      </div>
+      <div>
+        <div class="field__label">Joining</div>
+        <div class="field__value"><%= locals.joinDate || 'N/A' %></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="qr">
+      <% if (locals.qrCode) { %>
+        <img src="<%= qrCode %>" alt="QR" style="width:100%;height:100%;object-fit:contain;filter:brightness(0) invert(1);">
+      <% } else { %>
+        <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0"  y="0"  width="12" height="12" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1"/>
+          <rect x="2"  y="2"  width="8"  height="8"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="16" y="0"  width="12" height="12" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1"/>
+          <rect x="18" y="2"  width="8"  height="8"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="0"  y="16" width="12" height="12" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1"/>
+          <rect x="2"  y="18" width="8"  height="8"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="14" y="14" width="3"  height="3"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="18" y="14" width="3"  height="3"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="22" y="14" width="3"  height="3"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="14" y="18" width="3"  height="3"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="22" y="18" width="3"  height="3"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="14" y="22" width="3"  height="3"  fill="rgba(255,255,255,0.85)"/>
+          <rect x="18" y="22" width="7"  height="3"  fill="rgba(255,255,255,0.85)"/>
+        </svg>
+      <% } %>
+    </div>
+
+    <div class="signature">
+      <div class="signature__name"><%= locals.principalName || 'Principal' %></div>
+      <div class="signature__line"></div>
+      <div class="signature__title">Principal Signature</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -2,22 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Student ID Card - Gold Wave</title>
-
+  <title>Student ID Card - Teal Classic</title>
   <style>
-    /* ============================================================
-       RESET
-       ============================================================ */
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    /* ── CSS VARIABLES: only place EJS is used in CSS ── */
+    :root {
+      --primary-color: <%= locals.primaryColor || '#1a9e8f' %>;
+      --darken-color: <%= locals.darkenColor || '#1a7b72' %>;
     }
 
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    /* ============================================================
-       CARD CONTAINER (CR80: 85.6mm × 54mm)
-       ============================================================ */
     body {
       width: 85.6mm;
       height: 54mm;
@@ -34,88 +28,110 @@
       overflow: hidden;
     }
 
-
-    /* ============================================================
-       DECORATIVE BACKGROUND (gold + navy flowing curves)
-       ============================================================ */
     .card__bg {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       z-index: 1;
-      pointer-events: none;
     }
 
-
-    /* ============================================================
-       SCHOOL HEADER (top-center, small)
-       ============================================================ */
-    .school-header {
+    .card__content {
       position: absolute;
-      top: 3.5mm;
-      left: 30mm;
-      right: 8mm;
-      z-index: 10;
+      inset: 0;
+      z-index: 5;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      position: absolute;
+      top: 2mm;
+      left: 2mm;
       display: flex;
       align-items: center;
-      justify-content: center;
       gap: 1.5mm;
     }
 
-    .school-header__name {
-      font-size: 7pt;
-      font-weight: 800;
-      color: #1a1f3a;
-      letter-spacing: 0.5pt;
-      text-transform: uppercase;
-    }
-
-    .school-header__logo {
+    .header__logo {
       flex-shrink: 0;
-      width: 4mm;
-      height: 4mm;
+      width: 7.5mm;
+      height: 7.5mm;
     }
 
-    .school-header__logo img {
+    .header__logo img {
       width: 100%;
       height: 100%;
       object-fit: contain;
     }
 
-
-    /* ============================================================
-       CARD TITLE: "STUDENT ID CARD"
-       ============================================================ */
-    .card-title {
-      position: absolute;
-      top: 10mm;
-      left: 30mm;
-      right: 5mm;
-      z-index: 10;
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: 14pt;
-      font-weight: 900;
-      color: <%= primaryColor %>;
-      letter-spacing: 0.3pt;
+    .header__school-name {
+      font-size: 8pt;
+      font-weight: 700;
+      color: #111111;
+      line-height: 1.2;
     }
 
+    .header__school-address {
+      margin-top: 0.3mm;
+      font-size: 3.8pt;
+      color: #666666;
+    }
 
-    /* ============================================================
-       CIRCULAR PHOTO (left side)
-       ============================================================ */
+    /* ── ACADEMIC YEAR (top-right on arc) ── */
+    .academic-year {
+      position: absolute;
+      top: 2mm;
+      right: 3mm;
+      text-align: center;
+    }
+
+    .academic-year__label {
+      font-size: 4.5pt;
+      font-weight: 700;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .academic-year__value {
+      margin-top: 0.5mm;
+      font-size: 6pt;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    /* ── BADGE ── */
+    .badge {
+      position: absolute;
+      top: 15mm;
+      left: 29mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28mm;
+      height: 4.5mm;
+      background: var(--primary-color);
+      border-radius: 3mm;
+    }
+
+    .badge__text {
+      font-size: 6pt;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── STUDENT PHOTO ── */
     .photo {
       position: absolute;
-      top: 14mm;
-      left: 4mm;
-      width: 24mm;
-      height: 24mm;
-      background: #f0f0f0;
-      border: 1.5px solid <%= primaryColor %>;
-      border-radius: 50%;
+      top: 15mm;
+      left: 6mm;
+      width: 20mm;
+      height: 25mm;
+      background: #e8e8e8;
+      border: 1px solid var(--primary-color);
+      border-radius: 2mm;
       overflow: hidden;
-      z-index: 10;
-      box-shadow: 0 0 0 1px #1a1f3a;
     }
 
     .photo img {
@@ -130,207 +146,174 @@
       justify-content: center;
       width: 100%;
       height: 100%;
-      background: #e0e0e0;
+      background: #dddddd;
     }
 
-    .photo__placeholder svg {
-      width: 14mm;
-      height: 14mm;
-      opacity: 0.4;
+    /* ── STUDENT NAME ── */
+    .student-name {
+      position: absolute;
+      top: 21mm;
+      left: 29mm;
+      width: 55mm;
+      font-size: 10pt;
+      font-weight: 700;
+      color: var(--primary-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-
-    /* ============================================================
-       INFO FIELDS (right side, below title)
-       ============================================================ */
+    /* ── FIELDS ── */
     .fields {
       position: absolute;
-      top: 18mm;
-      left: 30mm;
-      right: 5mm;
-      z-index: 10;
+      top: 27mm;
+      left: 29mm;
     }
 
     .field {
       display: flex;
       align-items: baseline;
-      margin-bottom: 1.5mm;
+      margin-bottom: 1.2mm;
     }
 
     .field__label {
-      flex-shrink: 0;
-      width: 14mm;
-      font-size: 6pt;
-      font-weight: 800;
-      color: #1a1f3a;
-      text-transform: uppercase;
-      letter-spacing: 0.3pt;
+      width: 16mm;
+      font-size: 6.5pt;
+      color: #555555;
     }
 
     .field__colon {
-      flex-shrink: 0;
-      width: 3mm;
-      font-size: 6pt;
-      font-weight: 800;
-      color: #1a1f3a;
+      margin-right: 1mm;
+      font-size: 6.5pt;
+      color: #999999;
     }
 
     .field__value {
-      flex: 1;
+      font-size: 6.5pt;
+      font-weight: 700;
+      color: #111111;
+    }
+
+    /* ── DATE OF ISSUE (bottom-left on triangle) ── */
+    .issue-date {
+      position: absolute;
+      bottom: 3.5mm;
+      left: 2mm;
+      text-align: left;
+    }
+
+    .issue-date__label {
+      font-size: 4pt;
+      font-weight: 700;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+
+    .issue-date__value {
+      margin-top: 0.3mm;
+      font-size: 5pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    /* ── QR CODE ── */
+    .qr-code {
+      position: absolute;
+      bottom: 2.5mm;
+      left: 29mm;
+      width: 12mm;
+      height: 12mm;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .qr-code img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: grayscale(100%);
+    }
+
+    /* ── PRINCIPAL SIGNATURE ── */
+    .signature {
+      position: absolute;
+      bottom: 3mm;
+      right: 3mm;
+      width: 26mm;
+      text-align: center;
+    }
+
+    .signature__name {
+      font-family: Georgia, serif;
       font-size: 6pt;
-      font-weight: 500;
-      color: #1a1f3a;
+      font-style: italic;
+      font-weight: 700;
+      color: #333333;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
+    .signature__line {
+      margin: 1mm 0 0.5mm;
+      border-top: 0.5px solid #333333;
+    }
+
+    .signature__title {
+      font-size: 3.5pt;
+      color: #333333;
+    }
   </style>
 </head>
-
 <body>
-  <div class="card">
+<div class="card">
 
-    <!-- ========================================
-         BACKGROUND DECORATIONS
-         (gold flowing curves + navy accents)
-         ======================================== -->
-    <svg
-      class="card__bg"
-      viewBox="0 0 856 540"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <!-- ===== LEFT SIDE ===== -->
+  <!-- SVG BG: EJS is fine here, it's not CSS -->
+  <svg class="card__bg" viewBox="0 0 170 107" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M91 0 L170 0 L170 55 Q146 36 118 14 Q104 3 91 0 Z" fill="<%= primaryColor %>"/>
+    <path d="M122 0 L170 0 L170 25 Q150 10 122 0 Z" fill="<%= darkenColor %>"/>
+    <path d="M0 78 L54 107 L0 107 Z" fill="<%= primaryColor %>"/>
+    <path d="M0 93 L30 107 L0 107 Z" fill="<%= darkenColor %>"/>
+  </svg>
 
-      <!-- top-left gold flowing curve -->
-      <path
-        d="M 0 0
-           L 380 0
-           Q 320 75 230 125
-           Q 145 170 80 215
-           Q 35 240 0 255
-           Z"
-        fill="<%= primaryColor %>"
-      />
+  <div class="card__content">
 
-      <!-- top-left navy accent (sits on top of gold at corner) -->
-      <path
-        d="M 0 0
-           L 220 0
-           Q 175 50 105 80
-           Q 45 110 0 130
-           Z"
-        fill="#1a1f3a"
-      />
-
-      <!-- bottom-left gold flowing curve (mirrored) -->
-      <path
-        d="M 0 540
-           L 380 540
-           Q 320 465 230 415
-           Q 145 370 80 325
-           Q 35 300 0 285
-           Z"
-        fill="<%= primaryColor %>"
-      />
-
-      <!-- bottom-left navy accent -->
-      <path
-        d="M 0 540
-           L 220 540
-           Q 175 490 105 460
-           Q 45 430 0 410
-           Z"
-        fill="#1a1f3a"
-      />
-
-
-      <!-- ===== RIGHT SIDE (mirrored) ===== -->
-
-      <!-- top-right gold flowing curve -->
-      <path
-        d="M 856 0
-           L 476 0
-           Q 536 75 626 125
-           Q 711 170 776 215
-           Q 821 240 856 255
-           Z"
-        fill="<%= primaryColor %>"
-      />
-
-      <!-- top-right navy accent -->
-      <path
-        d="M 856 0
-           L 636 0
-           Q 681 50 751 80
-           Q 811 110 856 130
-           Z"
-        fill="#1a1f3a"
-      />
-
-      <!-- bottom-right gold flowing curve -->
-      <path
-        d="M 856 540
-           L 476 540
-           Q 536 465 626 415
-           Q 711 370 776 325
-           Q 821 300 856 285
-           Z"
-        fill="<%= primaryColor %>"
-      />
-
-      <!-- bottom-right navy accent -->
-      <path
-        d="M 856 540
-           L 636 540
-           Q 681 490 751 460
-           Q 811 430 856 410
-           Z"
-        fill="#1a1f3a"
-      />
-    </svg>
-
-
-    <!-- ========================================
-         SCHOOL HEADER (small, top-right)
-         ======================================== -->
-    <div class="school-header">
-      <div class="school-header__name">
-        <%= (schoolName || 'School Name').toUpperCase() %>
-      </div>
-
-      <% if (logo) { %>
-        <div class="school-header__logo">
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header__logo">
+        <% if (logo) { %>
           <img src="<%= logo %>" alt="School Logo">
-        </div>
-      <% } else { %>
-        <div class="school-header__logo">
-          <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M16 3 L28 9 L28 18 C28 23 22 28 16 30 C10 28 4 23 4 18 L4 9 Z"
-              fill="<%= primaryColor %>"
-              stroke="#1a1f3a"
-              stroke-width="1.5"
-            />
-          </svg>
-        </div>
-      <% } %>
+        <% } %>
+      </div>
+      <div class="header__text">
+        <div class="header__school-name"><%= schoolName || 'School Name' %></div>
+        <% if (schoolAddress) { %>
+          <div class="header__school-address"><%= schoolAddress %></div>
+        <% } %>
+      </div>
     </div>
 
+    <!-- ACADEMIC YEAR -->
+    <div class="academic-year">
+      <div class="academic-year__label">Academic Year</div>
+      <div class="academic-year__value"><%= session || '2025-2026' %></div>
+    </div>
 
-    <!-- Card Title -->
-    <div class="card-title">STUDENT ID CARD</div>
+    <!-- BADGE -->
+    <div class="badge">
+      <span class="badge__text">STUDENT ID CARD</span>
+    </div>
 
-
-    <!-- ========================================
-         CIRCULAR PHOTO (left side)
-         ======================================== -->
+    <!-- PHOTO -->
     <div class="photo">
       <% if (photo) { %>
         <img src="<%= photo %>" alt="Student Photo">
       <% } else { %>
         <div class="photo__placeholder">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#1a1f3a" stroke-width="1.5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5">
             <circle cx="12" cy="8" r="4"/>
             <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
           </svg>
@@ -338,36 +321,58 @@
       <% } %>
     </div>
 
+    <!-- STUDENT NAME -->
+    <div class="student-name"><%= name || 'Student Name' %></div>
 
-    <!-- ========================================
-         STUDENT INFO FIELDS
-         ======================================== -->
+    <!-- FIELDS -->
     <div class="fields">
       <div class="field">
-        <div class="field__label">Name</div>
-        <div class="field__colon">:</div>
-        <div class="field__value"><%= name || 'Student Name' %></div>
+        <span class="field__label">Student Id</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= studentId || 'N/A' %></span>
       </div>
-
       <div class="field">
-        <div class="field__label">ID</div>
-        <div class="field__colon">:</div>
-        <div class="field__value"><%= studentId || '000-000-0000' %></div>
+        <span class="field__label">Roll No</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= roll || 'N/A' %></span>
       </div>
-
       <div class="field">
-        <div class="field__label">D.O.B</div>
-        <div class="field__colon">:</div>
-        <div class="field__value"><%= dob || '00/00/0000' %></div>
-      </div>
-
-      <div class="field">
-        <div class="field__label">Address</div>
-        <div class="field__colon">:</div>
-        <div class="field__value"><%= address || '—' %></div>
+        <span class="field__label">Class</span>
+        <span class="field__colon">:</span>
+        <span class="field__value"><%= cls || 'N/A' %></span>
       </div>
     </div>
 
+    <!-- DATE OF ISSUE -->
+    <div class="issue-date">
+      <div class="issue-date__label">Date Of Issue</div>
+      <div class="issue-date__value"><%= issueDate %></div>
+    </div>
+
+    <!-- QR CODE -->
+    <div class="qr-code">
+      <% if (qrCode) { %>
+        <img src="<%= qrCode %>" alt="QR Code">
+      <% } else { %>
+        <svg viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+          <rect x="0" y="0" width="9" height="9" fill="#111"/><rect x="1" y="1" width="7" height="7" fill="#fff"/><rect x="2" y="2" width="5" height="5" fill="#111"/>
+          <rect x="12" y="0" width="9" height="9" fill="#111"/><rect x="13" y="1" width="7" height="7" fill="#fff"/><rect x="14" y="2" width="5" height="5" fill="#111"/>
+          <rect x="0" y="12" width="9" height="9" fill="#111"/><rect x="1" y="13" width="7" height="7" fill="#fff"/><rect x="2" y="14" width="5" height="5" fill="#111"/>
+          <rect x="11" y="11" width="2" height="2" fill="#111"/><rect x="14" y="11" width="2" height="2" fill="#111"/>
+          <rect x="11" y="14" width="2" height="2" fill="#111"/><rect x="14" y="14" width="4" height="2" fill="#111"/>
+          <rect x="11" y="17" width="4" height="2" fill="#111"/><rect x="17" y="16" width="2" height="3" fill="#111"/>
+        </svg>
+      <% } %>
+    </div>
+
+    <!-- PRINCIPAL SIGNATURE -->
+    <div class="signature">
+      <div class="signature__name"><%= principalName || 'Principal' %></div>
+      <div class="signature__line"></div>
+      <div class="signature__title">Principal Signature</div>
+    </div>
+
   </div>
+</div>
 </body>
 </html>
