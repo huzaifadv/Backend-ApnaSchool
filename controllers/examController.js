@@ -2,6 +2,41 @@ import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import GeneratedExam from '../models/GeneratedExam.js';
 
+function parseMCQs(text) {
+  if (!text || typeof text !== 'string') {
+    return [];
+  }
+
+  const mcqs = [];
+  const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+  let currentMCQ = null;
+
+  for (const line of lines) {
+    const questionMatch = line.match(/^(\d+)\.\s+(.*)/);
+    if (questionMatch) {
+      if (currentMCQ) {
+        mcqs.push(currentMCQ);
+      }
+      currentMCQ = {
+        question: questionMatch[2],
+        options: [],
+        correctOption: ''
+      };
+    } else if (currentMCQ) {
+      const optionMatch = line.match(/^([A-D])\)\s+(.*)/);
+      if (optionMatch) {
+        currentMCQ.options.push(optionMatch[2]);
+      }
+    }
+  }
+
+  if (currentMCQ) {
+    mcqs.push(currentMCQ);
+  }
+
+  return mcqs;
+}
+
 function shuffleArray(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -132,16 +167,22 @@ export const getChapter = async (req, res) => {
 
 export const updateChapter = async (req, res) => {
   try {
-    const { chapterId }                               = req.params;
+    const { chapterId } = req.params;
     const { title, mcqs, shortQuestions, longQuestions } = req.body;
-    const schoolId  = req.schoolId?.toString();
+    const schoolId = req.schoolId?.toString();
     const teacherId = req.staffDbId?.toString();
     const chapter = await Chapter.findOne({ _id: chapterId, schoolId, teacherId });
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
-    if (title !== undefined)          chapter.title          = title.trim();
-    if (mcqs !== undefined)           chapter.mcqs           = mcqs;
+    if (title !== undefined) chapter.title = title.trim();
+    if (mcqs !== undefined) {
+      if (typeof mcqs === 'string') {
+        chapter.mcqs = parseMCQs(mcqs);
+      } else {
+        chapter.mcqs = mcqs;
+      }
+    }
     if (shortQuestions !== undefined) chapter.shortQuestions = shortQuestions.map(q => q?.trim()).filter(Boolean);
-    if (longQuestions !== undefined)  chapter.longQuestions  = longQuestions.map(q => q?.trim()).filter(Boolean);
+    if (longQuestions !== undefined) chapter.longQuestions = longQuestions.map(q => q?.trim()).filter(Boolean);
     await chapter.save();
     return res.json(chapter);
   } catch (err) {
