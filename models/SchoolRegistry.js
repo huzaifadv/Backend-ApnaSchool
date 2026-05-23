@@ -42,7 +42,7 @@ const schoolRegistrySchema = new mongoose.Schema(
     // Plan Information
     selectedPlan: {
       type: String,
-      enum: ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'],
+      enum: ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE', 'BUSINESS'],
       default: 'FREE',
       required: true,
     },

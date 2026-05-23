@@ -60,19 +60,24 @@ export const registerSchool = async (req, res, next) => {
 
     // Plan pricing and duration mapping (updated for monthly/yearly)
     const planDetails = {
-      'FREE_TRIAL': { price: 0, duration: '14 days', durationDays: 14 },
+      'FREE_TRIAL': { price: 0, duration: '7 days', durationDays: 7 },
       'BASIC': {
-        price: isYearly ? 29999 : 2999,
+        price: isYearly ? 49990 : 4999,
         duration: isYearly ? '1 year' : '1 month',
         durationDays: isYearly ? 365 : 30
       },
       'STANDARD': {
-        price: isYearly ? 49999 : 4999,
+        price: isYearly ? 99990 : 9999,
         duration: isYearly ? '1 year' : '1 month',
         durationDays: isYearly ? 365 : 30
       },
       'PREMIUM': {
-        price: isYearly ? 69999 : 7999,
+        price: isYearly ? 149990 : 14999,
+        duration: isYearly ? '1 year' : '1 month',
+        durationDays: isYearly ? 365 : 30
+      },
+      'BUSINESS': {
+        price: 0,
         duration: isYearly ? '1 year' : '1 month',
         durationDays: isYearly ? 365 : 30
       }
@@ -292,7 +297,7 @@ export const registerSchool = async (req, res, next) => {
     // Different message based on plan type
     const message = isPaidPlan
       ? 'School registered successfully. Your registration is pending approval. You can login after super admin approval.'
-      : 'School registered successfully. Your 14-day trial is active. You can login now.';
+      : 'School registered successfully. Your 7-day trial is active. You can login now.';
 
     res.status(201).json({
       success: true,
@@ -538,7 +543,8 @@ export const adminLogin = async (req, res, next) => {
 // @access  Private (Admin only)
 export const getSchoolDetails = async (req, res, next) => {
   try {
-    const school = await School.findById(req.schoolId).select('-password');
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId).select('-password');
 
     if (!school) {
       return res.status(404).json({
@@ -551,7 +557,7 @@ export const getSchoolDetails = async (req, res, next) => {
     const isYearly = school.billingCycle === 'YEARLY';
 
     const planDetailsMap = {
-      'FREE_TRIAL': { name: '14 Days Free Trial', type: 'trial', price: 0, duration: '14 days' },
+      'FREE_TRIAL': { name: '7 Days Free Trial', type: 'trial', price: 0, duration: '7 days' },
       'BASIC': {
         name: 'Basic Plan',
         type: 'paid',
@@ -658,7 +664,8 @@ export const updateSchoolDetails = async (req, res, next) => {
       });
     }
 
-    const school = await School.findById(req.schoolId);
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId);
 
     if (!school) {
       return res.status(404).json({
@@ -711,10 +718,11 @@ export const updateSchoolDetails = async (req, res, next) => {
 
     // Format plan details based on selectedPlan
     const planDetailsMap = {
-      'FREE_TRIAL': { name: '14 Days Free Trial', type: 'trial', price: 0, duration: '14 days' },
-      'BASIC': { name: 'Basic Plan', type: 'paid', price: 2999, duration: '1 month' },
-      'STANDARD': { name: 'Standard Plan', type: 'paid', price: 4999, duration: '1 month' },
-      'PREMIUM': { name: 'Premium Plan', type: 'paid', price: 8999, duration: '1 month' }
+      'FREE_TRIAL': { name: '7 Days Free Trial', type: 'trial', price: 0, duration: '7 days' },
+      'BASIC': { name: 'Basic Plan', type: 'paid', price: 4999, duration: '1 month' },
+      'STANDARD': { name: 'Standard Plan', type: 'paid', price: 9999, duration: '1 month' },
+      'PREMIUM': { name: 'Premium Plan', type: 'paid', price: 14999, duration: '1 month' },
+      'BUSINESS': { name: 'Business Plan', type: 'paid', price: 0, duration: '1 month' }
     };
 
     const planDetails = planDetailsMap[updatedSchool.selectedPlan] || {
@@ -752,7 +760,8 @@ export const verifyEmailChange = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'OTP is required' });
     }
 
-    const school = await School.findById(req.schoolId);
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId);
     if (!school || !school.pendingEmail || !school.emailChangeOTP) {
       return res.status(400).json({ success: false, message: 'No pending email change found' });
     }

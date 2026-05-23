@@ -2,20 +2,15 @@ import axios from 'axios';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
-import Book from '../models/Book.js';
-import BookPage from '../models/BookPage.js';
-
-/**
- * Download a Google Drive file and extract text into BookPages.
- * Handles Google's virus-scan confirmation page for large files.
- * Runs fully async — caller does not await this.
- */
+import BookModel from '../models/Book.js';
+import BookPageModel from '../models/BookPage.js';
+import { tenantModel } from '../utils/tenantModel.js';
 
 async function downloadGoogleDriveFile(fileId) {
   const baseUrl = 'https://drive.usercontent.google.com/download';
   const axiosOpts = {
     responseType: 'arraybuffer',
-    timeout: 300000, // 5 minute timeout for large books
+    timeout: 300000,
     maxRedirects: 15,
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
@@ -23,18 +18,15 @@ async function downloadGoogleDriveFile(fileId) {
     }
   };
 
-  // First attempt — confirm=t usually bypasses virus scan for public files
   let response = await axios.get(`${baseUrl}?id=${fileId}&export=download&confirm=t`, axiosOpts);
   let buffer = Buffer.from(response.data);
 
-  // Check if Google returned a confirmation HTML page instead of the PDF
   const headerStr = buffer.toString('utf8', 0, 100).toLowerCase();
   const isHtml = headerStr.includes('<!doc') || headerStr.includes('<html') || headerStr.startsWith('﻿<');
 
   if (isHtml) {
     const html = buffer.toString('utf8');
 
-    // Extract hidden form fields Google uses for large-file confirmation
     const uuidMatch = html.match(/name=["']uuid["']\s+value=["']([^"']+)["']/i);
     const atMatch   = html.match(/name=["']at["']\s+value=["']([^"']+)["']/i);
     const cfMatch   = html.match(/confirm=([0-9A-Za-z_-]+)/);
@@ -53,7 +45,6 @@ async function downloadGoogleDriveFile(fileId) {
         throw new Error('Google Drive requires you to sign in or the file is not publicly shared. Make sure "Anyone with the link" is selected in Share settings.');
       }
     } else {
-      // Try legacy export URL as last resort
       const legacyUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
       response = await axios.get(legacyUrl, axiosOpts);
       buffer = Buffer.from(response.data);
@@ -65,7 +56,6 @@ async function downloadGoogleDriveFile(fileId) {
     }
   }
 
-  // Sanity check — must start with %PDF
   const pdfHeader = buffer.toString('ascii', 0, 5);
   if (!pdfHeader.startsWith('%PDF')) {
     throw new Error(`Downloaded file is not a valid PDF (got: "${pdfHeader}"). Check that the Drive link points to a PDF file.`);
@@ -74,8 +64,11 @@ async function downloadGoogleDriveFile(fileId) {
   return buffer;
 }
 
-const parseDriveBook = async (bookId, fileId) => {
+const parseDriveBook = async (bookId, fileId, schoolId) => {
   console.log(`[DriveParser] Starting job for book: ${bookId}, fileId: ${fileId}`);
+
+  const Book     = await tenantModel(schoolId, BookModel);
+  const BookPage = await tenantModel(schoolId, BookPageModel);
 
   let buffer;
   try {
@@ -108,19 +101,16 @@ const parseDriveBook = async (bookId, fileId) => {
     const fullText = (result.text || '').trim();
     const numPages = result.numpages || 1;
 
-    // Detect scanned PDF: text is empty or contains only whitespace/control chars
     const meaningfulChars = fullText.replace(/[\s\n\r\t\f]+/g, '');
     if (meaningfulChars.length < 50) {
       isScanned = true;
     }
 
-    // Clear any existing pages
     await BookPage.deleteMany({ bookId });
 
     const book = await Book.findById(bookId);
 
     if (isScanned || meaningfulChars.length < 50) {
-      // Scanned PDF — save a single informational page so the record isn't empty
       await new BookPage({
         bookId,
         pageNo: 1,
@@ -137,7 +127,6 @@ const parseDriveBook = async (bookId, fileId) => {
       return;
     }
 
-    // Text-based PDF — split into pages
     let pages = fullText.split('\f');
     if (pages.length < numPages && fullText.length > 50) {
       const charsPerPage = Math.ceil(fullText.length / numPages);

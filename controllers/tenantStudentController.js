@@ -105,7 +105,8 @@ export const createStudent = async (req, res, next) => {
     const Class = await getModel(req.schoolId, 'classes');
 
     // Check student limit before adding
-    const school = await School.findById(req.schoolId);
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId);
     if (!school) {
       return res.status(404).json({
         success: false,

@@ -6,6 +6,7 @@ import Admin from '../models/Admin.js';
 import Student from '../models/Student.js';
 import { getModel } from '../models/dynamicModels.js';
 import SuperAdminNotice from '../models/SuperAdminNotice.js';
+import Branch from '../models/Branch.js';
 
 /**
  * Generate JWT token for Super Admin
@@ -233,7 +234,7 @@ const getAllSchools = async (req, res) => {
     }
 
     const schools = await School.find(query)
-      .select('schoolName email phone address city state selectedPlan billingCycle planType planPrice planDuration approvalStatus accountStatus isActive createdAt trial subscription planStartDate planEndDate fbrEnabled')
+      .select('schoolName email phone address city state selectedPlan billingCycle planType planPrice planDuration approvalStatus accountStatus isActive createdAt trial subscription planStartDate planEndDate fbrEnabled branchStructure branchUpgradeStatus branchUpgradeRequestedAt')
       .sort({ createdAt: -1 });
 
     // Import SchoolRegistry to get plan dates
@@ -344,11 +345,15 @@ const getSchoolById = async (req, res) => {
     const admins = await Admin.find({ schoolId: school._id })
       .select('name email phone isActive createdAt');
 
+    const branches = await Branch.find({ schoolId: school._id })
+      .select('branchName address city province email phone isHeadquarters isActive createdAt');
+
     res.status(200).json({
       success: true,
       data: {
         school,
         admins,
+        branches,
       },
     });
   } catch (error) {
@@ -485,10 +490,11 @@ const approveSchool = async (req, res) => {
     school.approvalStatus = 'approved';
     school.accountStatus = 'active';
     school.isActive = true;
+    await Branch.updateMany({ schoolId: school._id }, { $set: { isActive: true } });
 
     // Initialize trial dates if it's a trial plan
     if (school.planType === 'trial' && !school.trial?.endDate) {
-      const trialDays = 14; // 14 days trial
+      const trialDays = 7; // 7 days trial
       const trialStartDate = new Date();
       const trialEndDate = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
 
@@ -513,9 +519,10 @@ const approveSchool = async (req, res) => {
 
       // Update plan price and duration based on billing cycle
       const planPricing = {
-        'BASIC': { monthly: 2999, yearly: 29999 },
-        'STANDARD': { monthly: 4999, yearly: 49999 },
-        'PREMIUM': { monthly: 7999, yearly: 69999 }
+        'BASIC': { monthly: 4999, yearly: 49990 },
+        'STANDARD': { monthly: 9999, yearly: 99990 },
+        'PREMIUM': { monthly: 14999, yearly: 149990 },
+        'BUSINESS': { monthly: 0, yearly: 0 }
       };
 
       if (planPricing[school.selectedPlan]) {
@@ -542,6 +549,16 @@ const approveSchool = async (req, res) => {
     }
 
     await school.save({ validateModifiedOnly: true });
+
+    const Branch = (await import('../models/Branch.js')).default;
+    const branches = await Branch.find({ schoolId: school._id })
+      .select('_id isHeadquarters createdAt')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    if (branches.length > 0 && !branches.some((b) => b.isHeadquarters)) {
+      await Branch.updateOne({ _id: branches[0]._id }, { isHeadquarters: true });
+    }
 
     // Also update SchoolRegistry if it exists
     try {
@@ -593,6 +610,186 @@ const approveSchool = async (req, res) => {
 };
 
 /**
+ * @desc    Get pending business plan upgrade requests
+ * @route   GET /api/super-admin/upgrade-requests
+ * @access  Private (Super Admin)
+ */
+const getUpgradeRequests = async (req, res) => {
+  try {
+    const requests = await School.find({ branchUpgradeStatus: 'pending' })
+      .select('schoolName email phone city state selectedPlan planType billingCycle planPrice branchUpgradeRequestedAt branchUpgradeNotes branchStructure accountStatus approvalStatus')
+      .sort({ branchUpgradeRequestedAt: -1, createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      data: requests,
+    });
+  } catch (error) {
+    console.error('Get Upgrade Requests Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching upgrade requests',
+    });
+  }
+};
+
+/**
+ * @desc    Approve branch upgrade (switch to Business and enable multi-branch)
+ * @route   PUT /api/super-admin/schools/:id/approve-branch-upgrade
+ * @access  Private (Super Admin)
+ */
+const approveBranchUpgrade = async (req, res) => {
+  try {
+    const school = await School.findById(req.params.id);
+
+    const { billingCycle, planPrice } = req.body;
+
+    if (!school) {
+      return res.status(404).json({
+        success: false,
+        message: 'School not found',
+      });
+    }
+
+    if (school.branchUpgradeStatus !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending branch upgrade request',
+      });
+    }
+
+    const normalizedCycle = billingCycle
+      ? billingCycle.toUpperCase()
+      : (school.billingCycle || 'MONTHLY');
+
+    if (!['MONTHLY', 'YEARLY'].includes(normalizedCycle)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Billing cycle must be MONTHLY or YEARLY',
+      });
+    }
+
+    const parsedPlanPrice = planPrice !== undefined ? Number(planPrice) : 0;
+    if (Number.isNaN(parsedPlanPrice) || parsedPlanPrice < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Plan price must be a valid non-negative number',
+      });
+    }
+
+    school.branchUpgradeStatus = 'approved';
+    school.branchUpgradeApprovedAt = new Date();
+    school.branchStructure = 'multiple';
+
+    school.selectedPlan = 'BUSINESS';
+    school.planType = 'paid';
+    school.billingCycle = normalizedCycle;
+    school.approvalStatus = 'approved';
+    school.accountStatus = 'active';
+    school.isActive = true;
+    school.trial = { ...school.trial, isActive: false };
+
+    const isYearly = normalizedCycle === 'YEARLY';
+
+    school.planPrice = parsedPlanPrice;
+    school.planDuration = isYearly ? '1 year' : '1 month';
+    school.studentLimit = -1;
+    school.isPlanExpired = false;
+    school.paymentStatus = 'paid';
+    school.gracePeriodEndDate = null;
+
+    const subscriptionStartDate = new Date();
+    const subscriptionEndDate = new Date();
+    subscriptionEndDate.setDate(subscriptionEndDate.getDate() + (isYearly ? 365 : 30));
+
+    school.subscription = {
+      plan: isYearly ? 'yearly' : 'monthly',
+      status: 'active',
+      startDate: subscriptionStartDate,
+      endDate: subscriptionEndDate
+    };
+
+    school.planStartDate = subscriptionStartDate;
+    school.planEndDate = subscriptionEndDate;
+
+    await school.save({ validateModifiedOnly: true });
+
+    try {
+      const { default: SchoolRegistry } = await import('../models/SchoolRegistry.js');
+      const schoolRegistry = await SchoolRegistry.findOne({ schoolId: school._id });
+      if (schoolRegistry) {
+        schoolRegistry.planType = 'paid';
+        schoolRegistry.selectedPlan = 'BUSINESS';
+        schoolRegistry.approvalStatus = 'approved';
+        schoolRegistry.accountStatus = 'active';
+        schoolRegistry.trialActive = false;
+        schoolRegistry.planStartDate = subscriptionStartDate;
+        schoolRegistry.planEndDate = subscriptionEndDate;
+        await schoolRegistry.save();
+      }
+    } catch (registryError) {
+      console.error('Error updating SchoolRegistry for branch upgrade:', registryError);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Branch upgrade approved successfully',
+      data: school
+    });
+  } catch (error) {
+    console.error('Approve Branch Upgrade Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error approving branch upgrade'
+    });
+  }
+};
+
+/**
+ * @desc    Reject business plan upgrade request
+ * @route   PUT /api/super-admin/schools/:id/reject-branch-upgrade
+ * @access  Private (Super Admin)
+ */
+const rejectBranchUpgrade = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const school = await School.findById(req.params.id);
+
+    if (!school) {
+      return res.status(404).json({
+        success: false,
+        message: 'School not found',
+      });
+    }
+
+    if (school.branchUpgradeStatus !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending upgrade request to reject',
+      });
+    }
+
+    school.branchUpgradeStatus = 'rejected';
+    school.branchUpgradeRejectedAt = new Date();
+    school.branchUpgradeNotes = reason || 'Rejected by Super Admin';
+    await school.save({ validateModifiedOnly: true });
+
+    res.status(200).json({
+      success: true,
+      message: 'Upgrade request rejected',
+      data: school,
+    });
+  } catch (error) {
+    console.error('Reject Branch Upgrade Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error rejecting upgrade request',
+    });
+  }
+};
+
+/**
  * @desc    Reject school
  * @route   PUT /api/super-admin/schools/:id/reject
  * @access  Private (Super Admin)
@@ -613,6 +810,7 @@ const rejectSchool = async (req, res) => {
     school.accountStatus = 'inactive';
     school.isActive = false;
     school.rejectionReason = reason || 'Not specified';
+    await Branch.updateMany({ schoolId: school._id }, { $set: { isActive: false } });
 
     await school.save({ validateModifiedOnly: true });
 
@@ -681,6 +879,7 @@ const suspendSchool = async (req, res) => {
     school.isActive = false;
     school.suspensionReason = reason || 'Suspended by Super Admin';
     school.suspendedAt = new Date();
+    await Branch.updateMany({ schoolId: school._id }, { $set: { isActive: false } });
 
     await school.save({ validateModifiedOnly: true });
 
@@ -728,6 +927,7 @@ const reactivateSchool = async (req, res) => {
     school.suspensionReason = undefined;
     school.suspendedAt = undefined;
     school.reactivatedAt = new Date();
+    await Branch.updateMany({ schoolId: school._id }, { $set: { isActive: true } });
 
     await school.save({ validateModifiedOnly: true });
 
@@ -944,21 +1144,21 @@ const updateSchoolPlan = async (req, res) => {
     if (selectedPlan === 'FREE_TRIAL') {
       school.planType = 'trial';
       planPrice = 0;
-      planDuration = '14 days';
+      planDuration = '7 days';
       studentLimit = 100;
-      // Trial: 14 days from now
-      endDate.setDate(endDate.getDate() + 14);
+      // Trial: 7 days from now
+      endDate.setDate(endDate.getDate() + 7);
     } else if (selectedPlan === 'BASIC') {
       school.planType = 'paid';
       studentLimit = 300;
 
       if (billingCycle === 'yearly') {
-        planPrice = 29999;
+        planPrice = 49990;
         planDuration = '1 year';
         // 365 days from now
         endDate.setDate(endDate.getDate() + 365);
       } else {
-        planPrice = 2999;
+        planPrice = 4999;
         planDuration = '1 month';
         // 30 days from now
         endDate.setDate(endDate.getDate() + 30);
@@ -968,24 +1168,37 @@ const updateSchoolPlan = async (req, res) => {
       studentLimit = 600;
 
       if (billingCycle === 'yearly') {
-        planPrice = 49999;
+        planPrice = 99990;
         planDuration = '1 year';
         endDate.setDate(endDate.getDate() + 365);
       } else {
-        planPrice = 4999;
+        planPrice = 9999;
         planDuration = '1 month';
         endDate.setDate(endDate.getDate() + 30);
       }
     } else if (selectedPlan === 'PREMIUM') {
       school.planType = 'paid';
-      studentLimit = -1; // Unlimited
+      studentLimit = 1200;
 
       if (billingCycle === 'yearly') {
-        planPrice = 69999;
+        planPrice = 149990;
         planDuration = '1 year';
         endDate.setDate(endDate.getDate() + 365);
       } else {
-        planPrice = 7999;
+        planPrice = 14999;
+        planDuration = '1 month';
+        endDate.setDate(endDate.getDate() + 30);
+      }
+    } else if (selectedPlan === 'BUSINESS') {
+      school.planType = 'paid';
+      studentLimit = -1;
+
+      if (billingCycle === 'yearly') {
+        planPrice = 0;
+        planDuration = '1 year';
+        endDate.setDate(endDate.getDate() + 365);
+      } else {
+        planPrice = 0;
         planDuration = '1 month';
         endDate.setDate(endDate.getDate() + 30);
       }
@@ -1459,7 +1672,61 @@ const deleteSchool = async (req, res) => {
       throw new Error(`Failed to delete admin users: ${adminError.message}`);
     }
 
-    // Step 3: Delete from SchoolRegistry if exists
+    // Step 3: Delete branch tenant databases
+    try {
+      const { default: Branch } = await import('../models/Branch.js');
+      const { getTenantConnection, getBranchDBName, closeTenantConnection } = await import('../config/tenantDB.js');
+
+      const branches = await Branch.find({ schoolId }).select('_id branchName');
+
+      for (const branch of branches) {
+        try {
+          const dbName = getBranchDBName(branch.branchName, schoolName);
+          const branchConnection = await getTenantConnection(branch._id, branch.branchName);
+          await branchConnection.dropDatabase();
+          console.log(`✓ Dropped branch tenant database: ${dbName}`);
+          await closeTenantConnection(branch._id);
+          console.log(`✓ Closed branch connection: ${branch._id}`);
+        } catch (branchDbError) {
+          console.error('Error dropping branch database:', branchDbError.message);
+        }
+      }
+    } catch (branchDbError) {
+      console.error('Error listing branches for DB deletion:', branchDbError.message);
+    }
+
+    // Step 4: Delete Branch, Institution, Payment, RegistrationSession records
+    try {
+      const [{ default: Branch }, { default: Institution }, { default: Payment }, { default: RegistrationSession }] = await Promise.all([
+        import('../models/Branch.js'),
+        import('../models/Institution.js'),
+        import('../models/Payment.js'),
+        import('../models/RegistrationSession.js'),
+      ]);
+
+      await Promise.all([
+        Branch.deleteMany({ schoolId }),
+        Institution.deleteOne({ schoolId }),
+        Payment.deleteMany({ sessionId: { $exists: true }, schoolId }),
+        RegistrationSession.deleteMany({ schoolId }),
+      ]);
+      console.log(`✓ Deleted Branch, Institution, Payment, RegistrationSession for school: ${schoolName}`);
+    } catch (err) {
+      console.error('Error deleting registration data:', err.message);
+      // Non-fatal — continue
+    }
+
+    // Step 5: Delete Branch admin access mappings
+    try {
+      const { default: BranchAdminAccess } = await import('../models/BranchAdminAccess.js');
+      await BranchAdminAccess.deleteMany({ schoolId });
+      console.log(`✓ Deleted BranchAdminAccess for school: ${schoolName}`);
+    } catch (accessError) {
+      console.error('Error deleting BranchAdminAccess:', accessError.message);
+      // Non-fatal — continue
+    }
+
+    // Step 6: Delete from SchoolRegistry if exists
     try {
       const { default: SchoolRegistry } = await import('../models/SchoolRegistry.js');
       await SchoolRegistry.findOneAndDelete({ schoolId: schoolId });
@@ -1469,7 +1736,7 @@ const deleteSchool = async (req, res) => {
       throw new Error(`Failed to delete SchoolRegistry: ${registryError.message}`);
     }
 
-    // Step 4: Delete from School model
+    // Step 7: Delete from School model
     const deletedSchool = await School.findByIdAndDelete(schoolId);
     if (!deletedSchool) {
       throw new Error('Failed to delete School document from database');
@@ -1485,8 +1752,14 @@ const deleteSchool = async (req, res) => {
         deletedItems: {
           schoolDocument: true,
           tenantDatabase: true,
+          branchDatabases: true,
           schoolRegistry: true,
-          admins: true
+          admins: true,
+          branches: true,
+          branchAdminAccess: true,
+          institution: true,
+          payments: true,
+          registrationSession: true
         }
       }
     });
@@ -1562,6 +1835,9 @@ export {
   getPlatformStats,
   checkSuperAdminExists,
   approveSchool,
+  getUpgradeRequests,
+  approveBranchUpgrade,
+  rejectBranchUpgrade,
   rejectSchool,
   suspendSchool,
   reactivateSchool,

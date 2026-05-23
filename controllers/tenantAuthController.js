@@ -6,6 +6,8 @@ import { initializeTenantDB } from '../config/tenantDB.js';
 import { getModel } from '../models/dynamicModels.js';
 import { sendPasswordResetEmail, sendVerificationEmail, sendSchoolRegistrationOTP } from '../utils/emailService.js';
 import { generateOTP, hashOTP, verifyOTP, getOTPExpiry } from '../utils/otpHelper.js';
+import Branch from '../models/Branch.js';
+import BranchAdminAccess from '../models/BranchAdminAccess.js';
 
 /**
  * Tenant-aware Authentication Controller
@@ -72,16 +74,17 @@ export const registerSchool = async (req, res, next) => {
 
     // Plan details mapping
     const planDetails = {
-      'FREE_TRIAL': { price: 0, duration: '14 days' },
-      'BASIC': { price: 2999, duration: '1 month' },
-      'STANDARD': { price: 4999, duration: '1 month' },
-      'PREMIUM': { price: 7999, duration: '1 month' }
+      'FREE_TRIAL': { price: 0, duration: '7 days' },
+      'BASIC': { price: 4999, duration: '1 month' },
+      'STANDARD': { price: 9999, duration: '1 month' },
+      'PREMIUM': { price: 14999, duration: '1 month' },
+      'BUSINESS': { price: 0, duration: '1 month' }
     };
 
     // Use provided values or fallback to defaults
     const plan = planDetails[selectedPlan] || {};
     const finalPlanPrice = planPrice !== undefined ? planPrice : (plan.price || 0);
-    const finalPlanDuration = planDuration || (plan.duration || '14 days');
+    const finalPlanDuration = planDuration || (plan.duration || '7 days');
     const finalSelectedPlan = selectedPlan || 'FREE_TRIAL';
     const planType = finalSelectedPlan === 'FREE_TRIAL' ? 'trial' : 'paid';
 
@@ -128,7 +131,7 @@ export const registerSchool = async (req, res, next) => {
     // Initialize trial dates for FREE_TRIAL plans
     if (planType === 'trial') {
       const trialStartDate = new Date();
-      const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+      const trialEndDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
       school.trial = {
         isActive: true,
@@ -141,7 +144,7 @@ export const registerSchool = async (req, res, next) => {
       school.planEndDate = trialEndDate;
 
       await school.save();
-      console.log(`✓ Trial period initialized (14 days)`);
+      console.log('✓ Trial period initialized (7 days)');
       console.log(`✓ Plan Start: ${trialStartDate}`);
       console.log(`✓ Plan End: ${trialEndDate}`);
     }
@@ -295,93 +298,289 @@ export const adminLogin = async (req, res, next) => {
     }
 
     const { email, password } = req.body;
+    const normalizedEmail = email?.toLowerCase().trim();
+    const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const emailRegex = normalizedEmail ? new RegExp(`^${escapeRegex(normalizedEmail)}$`, 'i') : null;
 
-    // Step 1: Find school in main database
-    // Note: We don't check isActive here because we want to allow login
-    // even if email is not verified yet (email verification happens after login)
     const { default: School } = await import('../models/School.js');
+    const school = emailRegex ? await School.findOne({ email: emailRegex }) : null;
 
-    const school = await School.findOne({ email });
-    console.log('[Login] Step1 school found:', !!school, 'email:', email);
-    if (!school) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    // If a school exists with this email, it's the main admin.
+    // The BranchAdminAccess flow is for invited admins with different emails.
+    if (school) {
+      // This is the original admin login flow
+      console.log('[Login] Main admin login flow initiated for email:', normalizedEmail);
 
-    const Admin = await getModel(school._id, 'admins');
-    const admin = await Admin.findOne({ email });
-    console.log('[Login] Step2 admin found:', !!admin);
-    if (!admin) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      const Admin = await getModel(school._id, 'admins');
+      const admin = emailRegex ? await Admin.findOne({ email: emailRegex }) : null;
+      if (!admin) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    console.log('[Login] Step3 isActive:', admin.isActive);
-    if (!admin.isActive) return res.status(401).json({ success: false, message: 'Your account has been deactivated.' });
+      if (!admin.isActive) return res.status(401).json({ success: false, message: 'Your account has been deactivated.' });
 
-    const isPasswordValid = await bcrypt.compare(password, admin.password);
-    console.log('[Login] Step4 password valid:', isPasswordValid);
-    if (!isPasswordValid) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      const isPasswordValid = await bcrypt.compare(password, admin.password);
+      if (!isPasswordValid) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    // Check if email is verified
-    if (!school.isEmailVerified) {
-      console.log(`⚠️ Login attempt with unverified email: ${email}`);
+      // ... (rest of the original admin login logic)
+      // Check if email is verified
+      if (!school.isEmailVerified) {
+        console.log(`⚠️ Login attempt with unverified email: ${normalizedEmail}`);
 
-      // Check if OTP exists, if not generate a new one
-      if (!school.emailVerificationOTP || !school.emailVerificationExpires) {
-        const otp = generateOTP();
-        const hashedOTP = hashOTP(otp);
-        const otpExpiry = getOTPExpiry();
+        // Check if OTP exists, if not generate a new one
+        if (!school.emailVerificationOTP || !school.emailVerificationExpires) {
+          const otp = generateOTP();
+          school.emailVerificationOTP = hashOTP(otp);
+          school.emailVerificationExpires = getOTPExpiry();
+          await school.save();
+          console.log(`Generated new OTP for ${email}`);
 
-        school.emailVerificationOTP = hashedOTP;
-        school.emailVerificationExpires = otpExpiry;
-        await school.save();
+          // Send OTP email without blocking
+          sendSchoolRegistrationOTP(normalizedEmail, otp).catch(err => {
+            console.error(`Failed to send OTP to ${normalizedEmail}:`, err);
+          });
+        }
 
-        console.log('🔑 New OTP generated for unverified user:', process.env.NODE_ENV === 'development' ? otp : '******');
-
-        // Send OTP email asynchronously
-        sendSchoolRegistrationOTP(email, otp, school.schoolName)
-          .then(() => console.log('✅ OTP email sent to unverified user'))
-          .catch((err) => console.error('❌ Failed to send OTP email:', err.message));
+        return res.status(403).json({
+          success: false,
+          emailNotVerified: true,
+          verificationType: 'otp',
+          message: 'Please verify your email address. An OTP has been sent.'
+        });
       }
 
-      return res.status(403).json({
-        success: false,
-        emailNotVerified: true,
-        message: 'Please verify your email address to continue. We have sent a verification code to your email.',
-        email: school.email
+      // Check account status after email verification
+      if (school.accountStatus !== 'active') {
+        const statusMessage = school.approvalStatus === 'pending'
+          ? 'Your account is pending approval from the super admin.'
+          : `Your account is currently ${school.accountStatus}.`;
+        return res.status(403).json({ success: false, message: statusMessage });
+      }
+
+      // Multi-branch check for main admin
+      const branches = await Branch.find({ schoolId: school._id, isActive: true })
+        .select('_id branchName address city province isHeadquarters')
+        .lean();
+
+      const isMultiBranch = (school.branchStructure === 'multiple' || !school.branchStructure) && branches.length > 1;
+
+      if (isMultiBranch) {
+        let access = await BranchAdminAccess.findOne({ schoolId: school._id, email: normalizedEmail });
+
+        if (!access) {
+          access = await BranchAdminAccess.create({
+            schoolId: school._id,
+            name: admin.name,
+            email: normalizedEmail,
+            password: admin.password,
+            role: 'super_admin',
+            isActive: true,
+            isEmailVerified: true,
+            assignedBranches: branches.map((branch) => ({
+              branchId: branch._id,
+              role: 'super_admin',
+              isPrimary: branch.isHeadquarters === true
+            }))
+          });
+        } else {
+          const branchIds = new Set(branches.map((branch) => branch._id.toString()));
+          access.assignedBranches = access.assignedBranches.filter((assignment) => branchIds.has(assignment.branchId.toString()));
+          branches.forEach((branch) => {
+            const exists = access.assignedBranches.some((assignment) => assignment.branchId.toString() === branch._id.toString());
+            if (!exists) {
+              access.assignedBranches.push({
+                branchId: branch._id,
+                role: access.role || 'super_admin',
+                isPrimary: branch.isHeadquarters === true
+              });
+            }
+          });
+          access.assignedBranches.forEach((assignment) => {
+            const branch = branches.find((b) => b._id.toString() === assignment.branchId.toString());
+            assignment.isPrimary = branch?.isHeadquarters === true;
+          });
+          await access.save({ validateModifiedOnly: true });
+        }
+
+        const token = jwt.sign(
+          { accessId: access._id, schoolId: school._id, role: access.role, email: access.email, type: 'admin' },
+          process.env.JWT_SECRET,
+          { expiresIn: '10d' }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Login successful',
+          token,
+          requiresBranchSelection: true,
+          branches: branches,
+          data: {
+            adminId: admin._id,
+            schoolId: school._id,
+            schoolName: school.schoolName,
+            name: admin.name,
+            email: admin.email,
+            role: admin.role
+          }
+        });
+      }
+
+      // Single-branch schools stay on the school tenant DB (no branchId in token)
+      const token = jwt.sign(
+        { id: admin._id, schoolId: school._id, type: 'admin' },
+        process.env.JWT_SECRET,
+        { expiresIn: '10d' }
+      );
+
+      admin.lastLogin = new Date();
+      await admin.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        token,
+        data: {
+          adminId: admin._id,
+          schoolId: school._id,
+          schoolName: school.schoolName,
+          name: admin.name,
+          email: admin.email,
+          role: admin.role
+        }
       });
     }
 
-    // Generate JWT token with schoolId (expires in 10 days)
-    const token = jwt.sign(
-      {
-        id: admin._id,
-        schoolId: school._id,
-        role: admin.role,
-        email: admin.email,
-        type: 'admin'
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '10d' }
-    );
-
-    // Return success response
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      token,
-      data: {
-        adminId: admin._id,
-        schoolId: school._id,
-        schoolName: school.schoolName,
-        name: admin.name,
-        email: admin.email,
-        role: admin.role,
-        address: school.address,
-        city: school.city,
-        state: school.state,
-        phone: school.phone,
-        fbrEnabled: school.fbrEnabled || false
+    // Branch admin access flow (new multi-branch system for INVITED admins)
+    const access = emailRegex ? await BranchAdminAccess.findOne({ email: emailRegex }) : null;
+    if (access) {
+      if (!access.isActive) {
+        return res.status(401).json({ success: false, message: 'Your account has been deactivated.' });
       }
-    });
+
+      const isPasswordValid = await bcrypt.compare(password, access.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
+
+      if (!access.isEmailVerified) {
+        return res.status(403).json({
+          success: false,
+          emailNotVerified: true,
+          verificationType: 'link',
+          message: 'Please verify your email address using the link sent to your email.'
+        });
+      }
+
+      const invitedAdminSchool = await School.findById(access.schoolId);
+      if (!invitedAdminSchool) {
+        return res.status(404).json({ success: false, message: 'Associated school not found' });
+      }
+
+      const branches = await Branch.find({ schoolId: access.schoolId, isActive: true })
+        .select('_id branchName address city province isHeadquarters')
+        .lean();
+
+      const allowedBranchIds = access.role === 'super_admin'
+        ? null
+        : new Set(access.assignedBranches.map((b) => b.branchId.toString()));
+
+      const availableBranches = allowedBranchIds
+        ? branches.filter((b) => allowedBranchIds.has(b._id.toString()))
+        : branches;
+
+      if (access.role !== 'super_admin' && availableBranches.length === 1) {
+        const branch = availableBranches[0];
+        const Admin = await getModel(branch._id, 'admins');
+        let adminRecord = await Admin.findOne({ email: access.email });
+
+        if (!adminRecord) {
+          adminRecord = await Admin.create({
+            name: access.name,
+            email: access.email,
+            password: access.password,
+            role: 'admin',
+            isActive: true,
+            isEmailVerified: true
+          });
+        }
+
+        const token = jwt.sign(
+          {
+            accessId: access._id,
+            schoolId: access.schoolId,
+            branchId: branch._id,
+            adminDbId: adminRecord._id,
+            role: access.role,
+            email: access.email,
+            type: 'admin'
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: '10d' }
+        );
+
+        access.lastLoginAt = new Date();
+        await access.save();
+
+        return res.status(200).json({
+          success: true,
+          message: 'Login successful',
+          token,
+          requiresBranchSelection: false,
+          branch: {
+            id: branch._id,
+            name: branch.branchName,
+            city: branch.city,
+            province: branch.province,
+            isHeadquarters: branch.isHeadquarters
+          },
+          data: {
+            adminId: access._id,
+            schoolId: access.schoolId,
+            schoolName: invitedAdminSchool.schoolName,
+            name: access.name,
+            email: access.email,
+            role: access.role
+          }
+        });
+      }
+
+      // Generate JWT token without branchId (branch selection required)
+      const token = jwt.sign(
+        {
+          accessId: access._id,
+          schoolId: access.schoolId,
+          role: access.role,
+          email: access.email,
+          type: 'admin'
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '10d' }
+      );
+
+      access.lastLoginAt = new Date();
+      await access.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        token,
+        requiresBranchSelection: true,
+        branches: availableBranches,
+        data: {
+          adminId: access._id,
+          schoolId: access.schoolId,
+          schoolName: invitedAdminSchool.schoolName,
+          name: access.name,
+          email: access.email,
+          role: access.role
+        }
+      });
+    }
+
+    // If neither a main school admin nor an invited branch admin is found
+    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+
 
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Admin login error:', error);
     next(error);
   }
 };
@@ -395,7 +594,8 @@ export const getSchoolDetails = async (req, res, next) => {
   try {
     const { default: School } = await import('../models/School.js');
 
-    const school = await School.findById(req.schoolId).select('-password -emailVerificationOTP -resetPasswordOTP');
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId).select('-password -emailVerificationOTP -resetPasswordOTP');
 
     if (!school) {
       return res.status(404).json({
@@ -409,6 +609,38 @@ export const getSchoolDetails = async (req, res, next) => {
     // Format the response with plan and subscription details
     const schoolData = school.toObject();
 
+    let branchContext = null;
+    if (req.mainSchoolId && req.schoolId && req.mainSchoolId.toString() !== req.schoolId.toString()) {
+      const currentBranch = await Branch.findById(req.schoolId)
+        .select('_id branchName city province isHeadquarters schoolId')
+        .lean();
+      const headquartersBranch = await Branch.findOne({ schoolId: schoolId, isHeadquarters: true })
+        .select('_id branchName city province')
+        .lean();
+
+      if (currentBranch) {
+        branchContext = {
+          isBranchAccount: true,
+          isHeadquarters: currentBranch.isHeadquarters === true,
+          currentBranch: {
+            id: currentBranch._id,
+            name: currentBranch.branchName,
+            city: currentBranch.city,
+            province: currentBranch.province,
+            isHeadquarters: currentBranch.isHeadquarters === true
+          },
+          headquarters: headquartersBranch
+            ? {
+              id: headquartersBranch._id,
+              name: headquartersBranch.branchName,
+              city: headquartersBranch.city,
+              province: headquartersBranch.province
+            }
+            : null
+        };
+      }
+    }
+
     // Format plan name for display
     const planNameMap = {
       '7_DAYS_FREE_TRIAL': '7 Days Free Trial',
@@ -421,6 +653,7 @@ export const getSchoolDetails = async (req, res, next) => {
       success: true,
       data: {
         ...schoolData,
+        branchContext,
         databaseName: `${dbName}_db`,
         planDetails: {
           name: planNameMap[schoolData.selectedPlan] || schoolData.selectedPlan,
@@ -456,7 +689,8 @@ export const updateSchoolDetails = async (req, res, next) => {
 
     const { default: School } = await import('../models/School.js');
 
-    const school = await School.findById(req.schoolId);
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId);
 
     if (!school) {
       return res.status(404).json({
@@ -697,7 +931,7 @@ export const verifyEmail = async (req, res, next) => {
 
     // Return different messages for trial vs paid plans
     const message = school.planType === 'trial'
-      ? 'Email verified successfully! Your 14-day trial is now active. Redirecting to login...'
+      ? 'Email verified successfully! Your 7-day trial is now active. Redirecting to login...'
       : 'Email verified successfully! Your account is awaiting admin approval for paid plan activation.';
 
     // Return success with redirect instruction
@@ -1213,7 +1447,8 @@ export const uploadSchoolLogo = async (req, res, next) => {
     }
 
     const { default: School } = await import('../models/School.js');
-    const school = await School.findById(req.schoolId);
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId);
 
     if (!school) {
       return res.status(404).json({ success: false, message: 'School not found' });

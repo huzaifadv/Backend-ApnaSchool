@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import Branch from '../models/Branch.js';
 
 /**
  * Multi-tenant Database Connection Manager
@@ -54,6 +55,34 @@ export const getMainConnection = () => {
     throw new Error('Main database not initialized. Call initMainDB() first.');
   }
   return mainConnection.connection;
+};
+
+const cleanDbPart = (value, maxLength = 45) => {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .substring(0, maxLength);
+};
+
+/**
+ * Generate database name for a branch
+ * @param {String} branchName - Branch name
+ * @param {String} schoolName - Optional school name prefix
+ * @param {String} suffix - Optional suffix for uniqueness
+ * @returns {String}
+ */
+export const getBranchDBName = (branchName, schoolName = null, suffix = '') => {
+  if (!branchName) {
+    throw new Error('Branch name is required to generate database name');
+  }
+
+  const cleanBranch = cleanDbPart(branchName);
+  const cleanSchool = schoolName ? cleanDbPart(schoolName, 30) : '';
+  const base = cleanSchool ? `${cleanSchool}_${cleanBranch}` : cleanBranch;
+  const safeSuffix = suffix ? `_${suffix}` : '';
+  return `${base}${safeSuffix}_db`;
 };
 
 /**
@@ -127,39 +156,78 @@ export const getSchoolDBName = async (schoolName, schoolId = null) => {
  * @param {String} schoolName - School's name for database naming
  * @returns {Connection} Mongoose connection to tenant database
  */
-export const getTenantConnection = async (schoolId, schoolName) => {
-  if (!schoolId) {
-    throw new Error('School ID is required');
+export const getTenantConnection = async (tenantId, tenantName) => {
+  if (!tenantId) {
+    throw new Error('Tenant ID is required');
   }
 
-  const schoolIdStr = schoolId.toString();
+  let tenantIdStr = tenantId.toString();
 
   // Return cached connection if exists
-  if (tenantConnections.has(schoolIdStr)) {
-    const connection = tenantConnections.get(schoolIdStr);
+  if (tenantConnections.has(tenantIdStr)) {
+    const connection = tenantConnections.get(tenantIdStr);
 
     // Check if connection is still alive
     if (connection.readyState === 1) {
       return connection;
     } else {
       // Connection is dead, remove from cache
-      tenantConnections.delete(schoolIdStr);
+      tenantConnections.delete(tenantIdStr);
     }
   }
 
-  // If schoolName not provided, get from database
-  if (!schoolName) {
-    const { default: School } = await import('../models/School.js');
-    const school = await School.findById(schoolId).select('schoolName');
-    if (!school) {
-      throw new Error(`School not found with ID: ${schoolId}`);
+  // Determine if tenantId is a branch
+  let isBranch = false;
+  let branchDoc = null;
+  let branchName = null;
+  let schoolName = null;
+  try {
+    branchDoc = await Branch.findById(tenantId).select('branchName schoolId');
+    if (branchDoc) {
+      const { default: School } = await import('../models/School.js');
+      const school = await School.findById(branchDoc.schoolId).select('schoolName branchStructure');
+
+      if (school?.branchStructure === 'multiple') {
+        isBranch = true;
+        branchName = branchDoc.branchName;
+        schoolName = school?.schoolName || null;
+      } else {
+        // Single-branch schools stay on the school tenant DB
+        isBranch = false;
+        tenantId = school?._id || tenantId;
+        tenantName = school?.schoolName || tenantName;
+      }
     }
-    schoolName = school.schoolName;
+  } catch (_err) {
+    // If branch lookup fails, fall back to school flow
+  }
+
+  const resolvedTenantIdStr = tenantId.toString();
+  if (resolvedTenantIdStr !== tenantIdStr && tenantConnections.has(resolvedTenantIdStr)) {
+    const connection = tenantConnections.get(resolvedTenantIdStr);
+    if (connection.readyState === 1) {
+      return connection;
+    }
+    tenantConnections.delete(resolvedTenantIdStr);
+  }
+
+  tenantIdStr = resolvedTenantIdStr;
+
+  // If schoolName not provided, get from database (school tenant only)
+  if (!isBranch && !tenantName) {
+    const { default: School } = await import('../models/School.js');
+    const school = await School.findById(tenantId).select('schoolName');
+    if (!school) {
+      throw new Error(`School not found with ID: ${tenantId}`);
+    }
+    tenantName = school.schoolName;
   }
 
   // Create new connection
   try {
-    const dbName = await getSchoolDBName(schoolName, schoolId);
+    const dbName = isBranch
+      ? getBranchDBName(branchName, schoolName)
+      : await getSchoolDBName(tenantName, tenantId);
     const mongoUri = process.env.MONGO_URI.replace(/\/[^/]*(\?|$)/, `/${dbName}$1`);
 
     const connection = mongoose.createConnection(mongoUri, {
@@ -179,23 +247,23 @@ export const getTenantConnection = async (schoolId, schoolName) => {
     });
 
     // Cache the connection
-    tenantConnections.set(schoolIdStr, connection);
+    tenantConnections.set(tenantIdStr, connection);
     console.log(`✓ Tenant DB Connected: ${dbName}`);
 
     // Handle connection errors
     connection.on('error', (err) => {
       console.error(`✗ Tenant DB Error [${dbName}]:`, err.message);
-      tenantConnections.delete(schoolIdStr);
+      tenantConnections.delete(tenantIdStr);
     });
 
     connection.on('disconnected', () => {
       console.log(`⚠ Tenant DB Disconnected: ${dbName}`);
-      tenantConnections.delete(schoolIdStr);
+      tenantConnections.delete(tenantIdStr);
     });
 
     return connection;
   } catch (error) {
-    console.error(`✗ Failed to connect to tenant DB for school ${schoolIdStr}:`, error.message);
+    console.error(`✗ Failed to connect to tenant DB for tenant ${tenantIdStr}:`, error.message);
     throw new Error(`Failed to connect to school database: ${error.message}`);
   }
 };
@@ -228,6 +296,38 @@ export const initializeTenantDB = async (schoolId, schoolName) => {
     return true;
   } catch (error) {
     console.error(`✗ Failed to initialize tenant DB for school ${schoolId}:`, error.message);
+    throw error;
+  }
+};
+
+/**
+ * Initialize a new branch tenant database with required collections
+ * @param {String} branchId - Branch ObjectId
+ */
+export const initializeBranchDB = async (branchId) => {
+  try {
+    const connection = await getTenantConnection(branchId);
+    const branch = await Branch.findById(branchId).select('branchName schoolId');
+    const { default: School } = await import('../models/School.js');
+    const school = branch?.schoolId
+      ? await School.findById(branch.schoolId).select('schoolName')
+      : null;
+    const dbName = getBranchDBName(branch?.branchName, school?.schoolName || null);
+
+    const collections = ['students', 'classes', 'admins', 'attendance', 'notices', 'reports'];
+
+    for (const collectionName of collections) {
+      const collectionExists = (await connection.db.listCollections({ name: collectionName }).toArray()).length > 0;
+      if (!collectionExists) {
+        await connection.db.createCollection(collectionName);
+        console.log(`  ✓ Created collection: ${dbName}.${collectionName}`);
+      }
+    }
+
+    console.log(`✓ Initialized branch tenant database: ${dbName}`);
+    return true;
+  } catch (error) {
+    console.error(`✗ Failed to initialize branch DB for branch ${branchId}:`, error.message);
     throw error;
   }
 };

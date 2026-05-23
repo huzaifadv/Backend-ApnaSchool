@@ -3,8 +3,9 @@ import path from 'path';
 import PDFDocument from 'pdfkit';
 import axios from 'axios';
 import School from '../models/School.js';
-import GeneratedSyllabus from '../models/GeneratedSyllabus.js';
+import GeneratedSyllabusModel from '../models/GeneratedSyllabus.js';
 import { getModel } from '../models/dynamicModels.js';
+import { tenantModel } from '../utils/tenantModel.js';
 
 export const generateSyllabus = async (req, res) => {
   try {
@@ -15,6 +16,7 @@ export const generateSyllabus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Topics are required' });
     }
 
+    const GeneratedSyllabus = await tenantModel(schoolId, GeneratedSyllabusModel);
     const school = await School.findById(schoolId);
     
     // Fetch Class/Subject names for header
@@ -95,7 +97,8 @@ export const generateSyllabus = async (req, res) => {
 export const getSyllabusHistory = async (req, res) => {
   try {
     const { schoolId } = req;
-    const history = await GeneratedSyllabus.find({ schoolId }).sort({ createdAt: -1 });
+    const GeneratedSyllabus = await tenantModel(schoolId, GeneratedSyllabusModel);
+    const history = await GeneratedSyllabus.find({}).sort({ createdAt: -1 });
     res.json({ success: true, data: history });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

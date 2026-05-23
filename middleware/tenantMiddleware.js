@@ -38,7 +38,12 @@ export const extractSchoolId = async (req, res, next) => {
     }
 
     // Attach schoolId and other user info to request
-    req.schoolId = decoded.schoolId;
+    if (decoded.branchId) {
+      req.mainSchoolId = decoded.schoolId;
+      req.schoolId = decoded.branchId;
+    } else {
+      req.schoolId = decoded.schoolId;
+    }
     req.userId = decoded.id;
     req.userType = decoded.type; // 'admin', 'student', 'parent', etc.
 
@@ -88,7 +93,8 @@ export const validateSchool = async (req, res, next) => {
       return next();
     }
 
-    if (!req.schoolId) {
+    const mainSchoolId = req.mainSchoolId || req.schoolId;
+    if (!mainSchoolId) {
       return res.status(400).json({
         success: false,
         message: 'School ID not found in request'
@@ -97,7 +103,7 @@ export const validateSchool = async (req, res, next) => {
 
     const { default: School } = await import('../models/School.js');
 
-    const school = await School.findById(req.schoolId).select(
+    const school = await School.findById(mainSchoolId).select(
       'isActive planType approvalStatus accountStatus trial subscription suspensionReason suspendedAt rejectionReason'
     );
 

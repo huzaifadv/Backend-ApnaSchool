@@ -1,6 +1,7 @@
-import Book from '../models/Book.js';
-import Chapter from '../models/Chapter.js';
-import GeneratedExam from '../models/GeneratedExam.js';
+import BookModel from '../models/Book.js';
+import ChapterModel from '../models/Chapter.js';
+import GeneratedExamModel from '../models/GeneratedExam.js';
+import { tenantModel } from '../utils/tenantModel.js';
 
 function parseMCQs(text) {
   if (!text || typeof text !== 'string') {
@@ -56,6 +57,9 @@ export const getBooks = async (req, res) => {
   try {
     const schoolId  = req.schoolId?.toString();
     const teacherId = req.staffDbId?.toString();
+    const Book    = await tenantModel(schoolId, BookModel);
+    const Chapter = await tenantModel(schoolId, ChapterModel);
+
     const books = await Book.find({ schoolId, teacherId }).sort({ createdAt: -1 });
 
     const bookIds  = books.map(b => b._id);
@@ -89,6 +93,7 @@ export const createBook = async (req, res) => {
     const { title } = req.body;
     const schoolId  = req.schoolId?.toString();
     const teacherId = req.staffDbId?.toString();
+    const Book = await tenantModel(schoolId, BookModel);
     if (!title?.trim()) return res.status(400).json({ error: 'Book title is required' });
     const book = await Book.create({ title: title.trim(), schoolId, teacherId });
     return res.status(201).json(book);
@@ -102,6 +107,8 @@ export const deleteBook = async (req, res) => {
     const { bookId } = req.params;
     const schoolId   = req.schoolId?.toString();
     const teacherId  = req.staffDbId?.toString();
+    const Book    = await tenantModel(schoolId, BookModel);
+    const Chapter = await tenantModel(schoolId, ChapterModel);
     const book = await Book.findOne({ _id: bookId, schoolId, teacherId });
     if (!book) return res.status(404).json({ error: 'Book not found' });
     await Chapter.deleteMany({ bookId });
@@ -119,6 +126,8 @@ export const getChapters = async (req, res) => {
     const { bookId } = req.params;
     const schoolId   = req.schoolId?.toString();
     const teacherId  = req.staffDbId?.toString();
+    const Book    = await tenantModel(schoolId, BookModel);
+    const Chapter = await tenantModel(schoolId, ChapterModel);
     const book = await Book.findOne({ _id: bookId, schoolId, teacherId });
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
@@ -143,6 +152,8 @@ export const createChapter = async (req, res) => {
     const { title }  = req.body;
     const schoolId   = req.schoolId?.toString();
     const teacherId  = req.staffDbId?.toString();
+    const Book    = await tenantModel(schoolId, BookModel);
+    const Chapter = await tenantModel(schoolId, ChapterModel);
     const book = await Book.findOne({ _id: bookId, schoolId, teacherId });
     if (!book) return res.status(404).json({ error: 'Book not found' });
     if (!title?.trim()) return res.status(400).json({ error: 'Chapter title is required' });
@@ -157,6 +168,7 @@ export const getChapter = async (req, res) => {
   try {
     const { chapterId } = req.params;
     const schoolId      = req.schoolId?.toString();
+    const Chapter = await tenantModel(schoolId, ChapterModel);
     const chapter = await Chapter.findOne({ _id: chapterId, schoolId });
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
     return res.json(chapter);
@@ -169,8 +181,9 @@ export const updateChapter = async (req, res) => {
   try {
     const { chapterId } = req.params;
     const { title, mcqs, shortQuestions, longQuestions } = req.body;
-    const schoolId = req.schoolId?.toString();
+    const schoolId  = req.schoolId?.toString();
     const teacherId = req.staffDbId?.toString();
+    const Chapter = await tenantModel(schoolId, ChapterModel);
     const chapter = await Chapter.findOne({ _id: chapterId, schoolId, teacherId });
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
     if (title !== undefined) chapter.title = title.trim();
@@ -195,6 +208,7 @@ export const deleteChapter = async (req, res) => {
     const { chapterId } = req.params;
     const schoolId      = req.schoolId?.toString();
     const teacherId     = req.staffDbId?.toString();
+    const Chapter = await tenantModel(schoolId, ChapterModel);
     const chapter = await Chapter.findOneAndDelete({ _id: chapterId, schoolId, teacherId });
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
     return res.json({ success: true });
@@ -209,16 +223,16 @@ export const generatePaper = async (req, res) => {
   try {
     const {
       bookId, chapterIds, examTitle, className, subjectName, timeAllowed, totalMarks,
-      // Manual selection mode
       selectedMcqs: manualMcqs,
       selectedShortQuestions: manualShort,
       selectedLongQuestions: manualLong,
       mcqMarks, shortMarks, longMarks,
-      // Legacy random mode
       mcqCount, shortCount, longCount
     } = req.body;
     const teacherId = req.staffDbId?.toString();
     const schoolId  = req.schoolId?.toString();
+    const Chapter      = await tenantModel(schoolId, ChapterModel);
+    const GeneratedExam = await tenantModel(schoolId, GeneratedExamModel);
 
     if (!bookId || !examTitle?.trim()) return res.status(400).json({ error: 'bookId and examTitle are required' });
     if (!Array.isArray(chapterIds) || !chapterIds.length) return res.status(400).json({ error: 'Select at least one chapter' });
@@ -230,14 +244,12 @@ export const generatePaper = async (req, res) => {
     let finalMcqs, finalShort, finalLong;
     let mode = 'random';
 
-    // Manual selection: use the questions the teacher explicitly chose
     if (manualMcqs !== undefined || manualShort !== undefined || manualLong !== undefined) {
       mode       = 'manual';
       finalMcqs  = Array.isArray(manualMcqs)  ? manualMcqs  : [];
       finalShort = Array.isArray(manualShort) ? manualShort : [];
       finalLong  = Array.isArray(manualLong)  ? manualLong  : [];
     } else {
-      // Legacy: pick randomly from chapters by count
       const mcqs_  = parseInt(mcqCount)   || 0;
       const short_ = parseInt(shortCount) || 0;
       const long_  = parseInt(longCount)  || 0;
@@ -295,6 +307,8 @@ export const regeneratePaper = async (req, res) => {
     const { examId } = req.params;
     const teacherId  = req.staffDbId?.toString();
     const schoolId   = req.schoolId?.toString();
+    const Chapter      = await tenantModel(schoolId, ChapterModel);
+    const GeneratedExam = await tenantModel(schoolId, GeneratedExamModel);
 
     const exam = await GeneratedExam.findOne({ _id: examId, teacherId, schoolId });
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
@@ -344,6 +358,7 @@ export const getExamHistory = async (req, res) => {
   try {
     const teacherId = req.staffDbId?.toString();
     const schoolId  = req.schoolId?.toString();
+    const GeneratedExam = await tenantModel(schoolId, GeneratedExamModel);
     const exams = await GeneratedExam.find({ teacherId, schoolId })
       .sort({ createdAt: -1 })
       .select('_id examTitle className subjectName totalMarks timeAllowed createdAt mcqs shortQuestions longQuestions mcqMarks shortMarks longMarks selectionMode');
@@ -358,6 +373,7 @@ export const getExamById = async (req, res) => {
     const { examId } = req.params;
     const teacherId  = req.staffDbId?.toString();
     const schoolId   = req.schoolId?.toString();
+    const GeneratedExam = await tenantModel(schoolId, GeneratedExamModel);
     const exam = await GeneratedExam.findOne({ _id: examId, teacherId, schoolId });
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
     return res.json(exam);
@@ -371,6 +387,7 @@ export const deleteExam = async (req, res) => {
     const { examId } = req.params;
     const teacherId  = req.staffDbId?.toString();
     const schoolId   = req.schoolId?.toString();
+    const GeneratedExam = await tenantModel(schoolId, GeneratedExamModel);
     await GeneratedExam.findOneAndDelete({ _id: examId, teacherId, schoolId });
     return res.json({ success: true });
   } catch (err) {

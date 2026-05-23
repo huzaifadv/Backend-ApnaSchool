@@ -1,33 +1,30 @@
 import express from 'express';
-import mongoose from 'mongoose';
-import upload from '../middleware/upload.js';
 import { protectStaff } from '../middleware/staffAuthMiddleware.js';
-import Book from '../models/Book.js';
-import BookPage from '../models/BookPage.js';
-import parseBook from '../jobs/parseBook.js';
+import upload from '../middleware/upload.js';
+import { tenantModel } from '../utils/tenantModel.js';
+import { getTenantConnection } from '../config/tenantDB.js';
+import BookModel    from '../models/Book.js';
+import BookPageModel from '../models/BookPage.js';
+import parseBook     from '../jobs/parseBook.js';
 import parseDriveBook from '../jobs/parseDriveBook.js';
 
 const router = express.Router();
 
-router.post('/upload', protectStaff, upload.single('file'), async (req, res) => {
+// All book routes require staff auth so we always have req.schoolId
+router.use(protectStaff);
+
+router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     const { subjectId, classId, title } = req.body;
-
-    // Use JWT-extracted values — guaranteed to be correct
-    const schoolId = req.schoolId || req.body.schoolId;
+    const schoolId   = req.schoolId?.toString();
     const uploadedBy = req.staffDbId?.toString() || req.body.uploadedBy;
 
-    if (!subjectId || !classId) {
-      return res.status(400).json({ error: 'Please select a Class and Subject' });
-    }
+    if (!subjectId || !classId) return res.status(400).json({ error: 'Please select a Class and Subject' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded or file type not allowed (PDF only)' });
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded or file type not allowed (PDF only)' });
-    }
-
-    // Stream buffer to GridFS using the live mongoose connection
     const { GridFSBucket } = await import('mongodb');
-    const db = mongoose.connection.db;
+    const connection = await getTenantConnection(schoolId);
+    const db = connection.db;
     const bucket = new GridFSBucket(db, { bucketName: 'books' });
 
     const filename = `${Date.now()}-${req.file.originalname}`;
@@ -35,105 +32,70 @@ router.post('/upload', protectStaff, upload.single('file'), async (req, res) => 
       metadata: { schoolId, subjectId, classId, uploadedBy }
     });
 
-    // Write buffer to GridFS
     await new Promise((resolve, reject) => {
-      uploadStream.end(req.file.buffer, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
+      uploadStream.end(req.file.buffer, (err) => { if (err) return reject(err); resolve(); });
     });
 
-    const gridFsId = uploadStream.id;
-
-    const newBook = new Book({
-      schoolId,
-      subjectId,
-      classId,
+    const Book = await tenantModel(schoolId, BookModel);
+    const newBook = await Book.create({
+      schoolId, subjectId, classId,
       title: title || '',
       fileName: req.file.originalname,
-      gridFsId,
+      gridFsId: uploadStream.id,
       uploadedBy: uploadedBy || 'unknown',
       status: 'processing'
     });
 
-    await newBook.save();
+    parseBook(newBook._id, schoolId);
 
-    parseBook(newBook._id);
-
-    return res.json({
-      success: true,
-      bookId: newBook._id,
-      message: 'Book uploaded successfully'
-    });
-
+    return res.json({ success: true, bookId: newBook._id, message: 'Book uploaded successfully' });
   } catch (error) {
     console.error('Upload Error:', error);
     return res.status(500).json({ success: false, error: error.message || 'Internal Server Error' });
   }
 });
 
-// ── Google Drive link upload ──────────────────────────────────────────────────
-router.post('/upload-link', protectStaff, async (req, res) => {
+router.post('/upload-link', async (req, res) => {
   try {
     const { title, subjectId, classId, driveLink } = req.body;
-    const schoolId   = req.schoolId;
+    const schoolId   = req.schoolId?.toString();
     const uploadedBy = req.staffDbId?.toString() || 'unknown';
 
     if (!title || !subjectId || !classId || !driveLink) {
       return res.status(400).json({ error: 'title, subjectId, classId and driveLink are required' });
     }
 
-    // Extract file ID from Drive share link formats:
-    // https://drive.google.com/file/d/FILE_ID/view...
-    // https://drive.google.com/open?id=FILE_ID
-    // https://drive.google.com/uc?id=FILE_ID
-    const idMatch = driveLink.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+    const idMatch  = driveLink.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
     const idMatch2 = driveLink.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
     const driveFileId = idMatch?.[1] || idMatch2?.[1];
-
     if (!driveFileId) {
       return res.status(400).json({ error: 'Invalid Google Drive link. Please use the "Share" link (e.g. https://drive.google.com/file/d/ID/view)' });
     }
 
-    const newBook = new Book({
-      schoolId,
-      subjectId,
-      classId,
-      title,
-      fileName: title,
-      driveLink,
-      driveFileId,
-      source: 'drive',
-      uploadedBy,
-      status: 'processing'
+    const Book = await tenantModel(schoolId, BookModel);
+    const newBook = await Book.create({
+      schoolId, subjectId, classId, title, uploadedBy,
+      fileName: title, driveLink, driveFileId, source: 'drive', status: 'processing'
     });
-    await newBook.save();
 
-    // Parse in background — do not await
-    parseDriveBook(newBook._id, driveFileId);
+    parseDriveBook(newBook._id, driveFileId, schoolId);
 
-    return res.json({
-      success: true,
-      bookId: newBook._id,
-      message: 'Book link added. Processing will complete shortly (1-2 minutes).'
-    });
+    return res.json({ success: true, bookId: newBook._id, message: 'Book link added. Processing will complete shortly (1-2 minutes).' });
   } catch (error) {
     console.error('Drive Upload Error:', error);
     return res.status(500).json({ success: false, error: error.message || 'Internal Server Error' });
   }
 });
 
-
 router.get('/', async (req, res) => {
   try {
     const { subjectId, classId } = req.query;
+    const schoolId = req.schoolId?.toString();
+    if (!subjectId || !classId) return res.status(400).json({ error: 'subjectId and classId are required' });
 
-    if (!subjectId || !classId) {
-      return res.status(400).json({ error: 'subjectId and classId are required' });
-    }
-
-    const books = await Book.find({ subjectId, classId })
-      .sort({ uploadedAt: -1 })
+    const Book = await tenantModel(schoolId, BookModel);
+    const books = await Book.find({ subjectId, classId, schoolId })
+      .sort({ createdAt: -1 })
       .select('_id fileName uploadedAt status subjectId classId');
 
     return res.json(books);
@@ -146,30 +108,20 @@ router.get('/', async (req, res) => {
 router.get('/:bookId/pages/:pageNo', async (req, res) => {
   try {
     const { bookId, pageNo } = req.params;
+    const schoolId = req.schoolId?.toString();
+
+    const Book     = await tenantModel(schoolId, BookModel);
+    const BookPage = await tenantModel(schoolId, BookPageModel);
 
     const book = await Book.findById(bookId);
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
-
-    if (book.status === 'processing') {
-      return res.status(202).json({ error: 'Book is still being parsed, please wait' });
-    }
+    if (!book) return res.status(404).json({ error: 'Book not found' });
+    if (book.status === 'processing') return res.status(202).json({ error: 'Book is still being parsed, please wait' });
 
     const pageCount = await BookPage.countDocuments({ bookId });
-    const parsedPageNo = parseInt(pageNo, 10);
+    const page = await BookPage.findOne({ bookId, pageNo: parseInt(pageNo, 10) });
+    if (!page) return res.status(404).json({ error: 'Page not found' });
 
-    const page = await BookPage.findOne({ bookId, pageNo: parsedPageNo });
-    if (!page) {
-      return res.status(404).json({ error: 'Page not found' });
-    }
-
-    return res.json({
-      pageNo: page.pageNo,
-      pageText: page.pageText,
-      totalPages: pageCount
-    });
-
+    return res.json({ pageNo: page.pageNo, pageText: page.pageText, totalPages: pageCount });
   } catch (error) {
     console.error('Fetch Page Error:', error);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -178,27 +130,30 @@ router.get('/:bookId/pages/:pageNo', async (req, res) => {
 
 router.get('/:bookId/pages', async (req, res) => {
   try {
-    const { bookId } = req.params;
-
-    const pageCount = await BookPage.countDocuments({ bookId });
-    return res.json({
-      totalPages: pageCount,
-      bookId
-    });
+    const { bookId }  = req.params;
+    const schoolId    = req.schoolId?.toString();
+    const BookPage    = await tenantModel(schoolId, BookPageModel);
+    const pageCount   = await BookPage.countDocuments({ bookId });
+    return res.json({ totalPages: pageCount, bookId });
   } catch (error) {
     console.error('Fetch Total Pages Error:', error);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
-router.get('/:bookId/view', protectStaff, async (req, res) => {
+router.get('/:bookId/view', async (req, res) => {
   try {
     const { bookId } = req.params;
+    const schoolId   = req.schoolId?.toString();
+
+    const Book = await tenantModel(schoolId, BookModel);
     const book = await Book.findById(bookId);
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
     const { GridFSBucket } = await import('mongodb');
-    const db = mongoose.connection.db;
+    const { Types } = await import('mongoose');
+    const connection = await getTenantConnection(schoolId);
+    const db = connection.db;
     const bucket = new GridFSBucket(db, { bucketName: 'books' });
 
     res.set({
@@ -207,65 +162,53 @@ router.get('/:bookId/view', protectStaff, async (req, res) => {
       'Cache-Control': 'public, max-age=3600'
     });
 
-    const downloadStream = bucket.openDownloadStream(new mongoose.Types.ObjectId(book.gridFsId));
+    const downloadStream = bucket.openDownloadStream(new Types.ObjectId(book.gridFsId));
     downloadStream.pipe(res);
-
-    downloadStream.on('error', (err) => {
-      console.error('View PDF Stream Error:', err);
-      res.status(500).end();
-    });
+    downloadStream.on('error', () => res.status(500).end());
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post('/:bookId/retry', protectStaff, async (req, res) => {
+router.post('/:bookId/retry', async (req, res) => {
   try {
     const { bookId } = req.params;
+    const schoolId   = req.schoolId?.toString();
+    const Book = await tenantModel(schoolId, BookModel);
     const book = await Book.findById(bookId);
     if (!book) return res.status(404).json({ error: 'Book not found' });
-
-    // Update status to processing
     book.status = 'processing';
     await book.save();
-
-    // Trigger parsing job asynchronously
-    import('../jobs/parseBook.js').then(m => m.default(book._id));
-
+    parseBook(book._id, schoolId);
     res.json({ success: true, message: 'Parsing retried' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.delete('/:bookId', protectStaff, async (req, res) => {
+router.delete('/:bookId', async (req, res) => {
   try {
     const { bookId } = req.params;
+    const schoolId   = req.schoolId?.toString();
 
+    const Book     = await tenantModel(schoolId, BookModel);
+    const BookPage = await tenantModel(schoolId, BookPageModel);
     const book = await Book.findById(bookId);
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
+    if (!book) return res.status(404).json({ error: 'Book not found' });
 
-    // 1. Delete file from GridFS
     try {
       const { GridFSBucket } = await import('mongodb');
-      const db = mongoose.connection.db;
-      const bucket = new GridFSBucket(db, { bucketName: 'books' });
+      const connection = await getTenantConnection(schoolId);
+      const bucket = new GridFSBucket(connection.db, { bucketName: 'books' });
       await bucket.delete(book.gridFsId);
     } catch (gridErr) {
-      // Log but don't block — file may already be missing
       console.warn(`⚠ Could not delete GridFS file for book ${bookId}:`, gridErr.message);
     }
 
-    // 2. Delete all parsed pages for this book
     await BookPage.deleteMany({ bookId });
-
-    // 3. Delete the book record
     await Book.findByIdAndDelete(bookId);
 
     return res.json({ success: true, message: 'Book deleted successfully' });
-
   } catch (error) {
     console.error('Delete Book Error:', error);
     return res.status(500).json({ success: false, error: error.message || 'Internal Server Error' });

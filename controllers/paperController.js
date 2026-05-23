@@ -2,12 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
 import axios from 'axios';
-import QuestionBasket from '../models/QuestionBasket.js';
-import Question from '../models/Question.js';
-import GeneratedPaper from '../models/GeneratedPaper.js';
 import School from '../models/School.js';
-import AcademicYear from '../models/AcademicYear.js';
+import QuestionBasketModel  from '../models/QuestionBasket.js';
+import QuestionModel        from '../models/Question.js';
+import GeneratedPaperModel  from '../models/GeneratedPaper.js';
 import { getModel } from '../models/dynamicModels.js';
+import { tenantModel } from '../utils/tenantModel.js';
 
 export const generatePaper = async (req, res) => {
   try {
@@ -19,26 +19,31 @@ export const generatePaper = async (req, res) => {
       return res.status(400).json({ success: false, message: 'basketId, classId, and subjectId are required' });
     }
 
+    const QuestionBasket = await tenantModel(schoolId, QuestionBasketModel);
+    const Question       = await tenantModel(schoolId, QuestionModel);
+    const GeneratedPaper = await tenantModel(schoolId, GeneratedPaperModel);
+
     // Fetch Basket and Questions
     const basket = await QuestionBasket.findById(basketId);
     if (!basket) return res.status(404).json({ success: false, message: 'Basket not found' });
-    
+
     const questions = await Question.find({ basketId });
-    
+
     // Fetch School Info
     const school = await School.findById(schoolId);
-    
+
     // Fetch Teacher Info
     const Staff = await getModel(schoolId, 'staffs');
     const teacher = await Staff.findById(teacherDbId);
-    
+
     // Fetch Class Info
     const Class = await getModel(schoolId, 'classes');
     const classDoc = await Class.findById(classId);
-    
-    // Fetch Session Year
-    const sessionDoc = await AcademicYear.findOne({ schoolId, isCurrent: true });
-    const sessionYear = sessionDoc ? sessionDoc.year : new Date().getFullYear();
+
+    // Fetch Session Year from tenant DB
+    const AcademicYear = await getModel(schoolId, 'academicyears');
+    const sessionDoc   = await AcademicYear.findOne({ isCurrent: true });
+    const sessionYear  = sessionDoc ? sessionDoc.year : new Date().getFullYear();
 
     // Fetch Subject Name - Use name directly if subjectId is the name, or find in assignedClasses
     let subjectName = subjectId;
@@ -152,7 +157,6 @@ export const generatePaper = async (req, res) => {
     doc.end();
 
     writeStream.on('finish', async () => {
-      // Save Record
       const paperRecord = new GeneratedPaper({
         schoolId,
         teacherId: req.staffCode || teacher?.staffId,
@@ -179,10 +183,10 @@ export const generatePaper = async (req, res) => {
 
 export const getPapers = async (req, res) => {
   try {
-    const { teacherId } = req.query; // This is the staffId/staffCode
+    const { teacherId } = req.query;
+    const schoolId = req.schoolId;
+    const GeneratedPaper = await tenantModel(schoolId, GeneratedPaperModel);
     const papers = await GeneratedPaper.find({ teacherId }).sort({ createdAt: -1 });
-    
-    // Populate simple info manually if needed or from record
     res.json({ success: true, data: papers });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -191,6 +195,8 @@ export const getPapers = async (req, res) => {
 
 export const downloadPaper = async (req, res) => {
   try {
+    const schoolId = req.schoolId;
+    const GeneratedPaper = await tenantModel(schoolId, GeneratedPaperModel);
     const paper = await GeneratedPaper.findById(req.params.id);
     if (!paper) return res.status(404).json({ success: false, message: 'Paper not found' });
 

@@ -299,7 +299,8 @@ export const markFeePayment = async (req, res, next) => {
 
     if (feePayment.status === 'Paid') {
       // Get school FBR configuration
-      const school = await School.findById(req.schoolId).select('fbrEnabled fbrConfig schoolName');
+      const schoolId = req.mainSchoolId || req.schoolId;
+      const school = await School.findById(schoolId).select('fbrEnabled fbrConfig schoolName');
 
       // Check if FBR is enabled and configured
       const isFBREnabled = school?.fbrEnabled === true;

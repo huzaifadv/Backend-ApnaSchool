@@ -85,7 +85,8 @@ export const createStaff = async (req, res) => {
     }
 
     // ── Generate staffId ─────────────────────────────────────────────────
-    const schoolDoc = await School.findById(req.schoolId).select('schoolName');
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const schoolDoc = await School.findById(schoolId).select('schoolName');
     const staffId = await generateStaffId(Staff, schoolDoc?.schoolName || 'school');
 
     // ── Hash password ─────────────────────────────────────────────────────

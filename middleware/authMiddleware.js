@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { getModel } from '../models/dynamicModels.js';
+import BranchAdminAccess from '../models/BranchAdminAccess.js';
 
 // Protect routes - verify JWT token (multi-tenant aware)
 export const protect = async (req, res, next) => {
@@ -14,14 +15,59 @@ export const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+      if (decoded.accessId && !decoded.branchId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Branch selection required'
+        });
+      }
+
+      if (decoded.accessId) {
+        const access = await BranchAdminAccess.findById(decoded.accessId);
+        if (!access || !access.isActive) {
+          return res.status(401).json({
+            success: false,
+            message: 'Not authorized, access revoked'
+          });
+        }
+        req.adminAccess = access;
+      }
+
+      if (decoded.accessId && !decoded.branchId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Branch selection required'
+        });
+      }
+
+      if (decoded.accessId) {
+        const access = await BranchAdminAccess.findById(decoded.accessId);
+        if (!access || !access.isActive) {
+          return res.status(401).json({
+            success: false,
+            message: 'Not authorized, access revoked'
+          });
+        }
+        req.adminAccess = access;
+      }
+
       // Attach schoolId to request first (needed to get tenant model)
-      req.schoolId = decoded.schoolId;
+      if (decoded.branchId) {
+        req.mainSchoolId = decoded.schoolId;
+        req.schoolId = decoded.branchId;
+      } else {
+        req.schoolId = decoded.schoolId;
+      }
 
       // Get Admin model from tenant database
-      const Admin = await getModel(decoded.schoolId, 'admins');
+      const Admin = await getModel(req.schoolId, 'admins');
 
       // Get admin from tenant database (exclude password)
-      req.admin = await Admin.findById(decoded.id).select('-password');
+      if (decoded.adminDbId) {
+        req.admin = await Admin.findById(decoded.adminDbId).select('-password');
+      } else {
+        req.admin = await Admin.findById(decoded.id).select('-password');
+      }
 
       if (!req.admin) {
         return res.status(401).json({
@@ -128,7 +174,12 @@ export const protectAdminOrStaff = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       // Attach schoolId to request first (needed to get tenant model)
-      req.schoolId = decoded.schoolId;
+      if (decoded.branchId) {
+        req.mainSchoolId = decoded.schoolId;
+        req.schoolId = decoded.branchId;
+      } else {
+        req.schoolId = decoded.schoolId;
+      }
 
       // Check if this is a staff token (portal: 'staff')
       if (decoded.portal === 'staff') {
@@ -155,8 +206,12 @@ export const protectAdminOrStaff = async (req, res, next) => {
         req.userType = 'staff'; // Mark as staff request
       } else {
         // Admin token authentication
-        const Admin = await getModel(decoded.schoolId, 'admins');
-        req.admin = await Admin.findById(decoded.id).select('-password');
+        const Admin = await getModel(req.schoolId, 'admins');
+        if (decoded.adminDbId) {
+          req.admin = await Admin.findById(decoded.adminDbId).select('-password');
+        } else {
+          req.admin = await Admin.findById(decoded.id).select('-password');
+        }
 
         if (!req.admin) {
           return res.status(401).json({
@@ -191,4 +246,63 @@ export const protectAdminOrStaff = async (req, res, next) => {
       message: 'Not authorized, no token'
     });
   }
+};
+
+// Protect routes using admin access token (before branch selection)
+export const protectAdminAccess = async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      if (decoded.type !== 'admin' || !decoded.accessId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Not authorized, invalid token type'
+        });
+      }
+
+      const access = await BranchAdminAccess.findById(decoded.accessId);
+      if (!access || !access.isActive) {
+        return res.status(401).json({
+          success: false,
+          message: 'Not authorized, access revoked'
+        });
+      }
+
+      req.adminAccess = access;
+      req.schoolId = decoded.schoolId;
+      req.mainSchoolId = decoded.schoolId;
+      req.userType = 'admin';
+
+      next();
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, token failed',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized, no token'
+    });
+  }
+};
+
+export const authorizeAdminAccess = (...roles) => {
+  return (req, res, next) => {
+    if (!req.adminAccess || !roles.includes(req.adminAccess.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Role '${req.adminAccess?.role}' is not authorized to access this route`
+      });
+    }
+    next();
+  };
 };

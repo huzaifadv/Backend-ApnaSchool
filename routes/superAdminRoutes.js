@@ -8,6 +8,9 @@ import {
   getPlatformStats,
   checkSuperAdminExists,
   approveSchool,
+  getUpgradeRequests,
+  approveBranchUpgrade,
+  rejectBranchUpgrade,
   rejectSchool,
   suspendSchool,
   reactivateSchool,
@@ -45,8 +48,13 @@ router.get('/dashboard-stats', superAdminAuth, getDashboardStats);
 router.get('/schools', superAdminAuth, getAllSchools);
 router.get('/schools/:id', superAdminAuth, getSchoolById);
 
+// Upgrade Requests
+router.get('/upgrade-requests', superAdminAuth, getUpgradeRequests);
+
 // School Actions
 router.put('/schools/:id/approve', superAdminAuth, approveSchool);
+router.put('/schools/:id/approve-branch-upgrade', superAdminAuth, approveBranchUpgrade);
+router.put('/schools/:id/reject-branch-upgrade', superAdminAuth, rejectBranchUpgrade);
 router.put('/schools/:id/reject', superAdminAuth, rejectSchool);
 router.put('/schools/:id/suspend', superAdminAuth, suspendSchool);
 router.put('/schools/:id/reactivate', superAdminAuth, reactivateSchool);

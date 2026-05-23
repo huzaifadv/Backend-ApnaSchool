@@ -47,7 +47,8 @@ export const getDashboardStats = async (req, res, next) => {
     });
 
     // Get school plan information from main database
-    const school = await School.findById(req.schoolId);
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId);
     const planInfo = school ? {
       selectedPlan: school.selectedPlan,
       planType: school.planType,

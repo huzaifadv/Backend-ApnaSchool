@@ -5,6 +5,7 @@
 
 import SchoolRegistry from '../models/SchoolRegistry.js';
 import School from '../models/School.js';
+import Branch from '../models/Branch.js';
 
 /**
  * @desc    Get all schools in registry
@@ -182,6 +183,7 @@ export const approveSchool = async (req, res) => {
       isActive: true,
       approvalStatus: 'approved',
     });
+    await Branch.updateMany({ schoolId: school.schoolId }, { $set: { isActive: true } });
 
     res.status(200).json({
       success: true,
@@ -277,6 +279,8 @@ export const suspendSchool = async (req, res) => {
     await School.findByIdAndUpdate(school.schoolId, {
       isActive: false,
     });
+    await Branch.updateMany({ schoolId: school.schoolId }, { $set: { isActive: false } });
+    await Branch.updateMany({ schoolId: school.schoolId }, { $set: { isActive: false } });
 
     res.status(200).json({
       success: true,
@@ -315,6 +319,7 @@ export const activateSchool = async (req, res) => {
     await School.findByIdAndUpdate(school.schoolId, {
       isActive: true,
     });
+    await Branch.updateMany({ schoolId: school.schoolId }, { $set: { isActive: true } });
 
     res.status(200).json({
       success: true,

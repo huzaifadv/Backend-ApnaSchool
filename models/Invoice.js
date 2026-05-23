@@ -15,7 +15,7 @@ const invoiceSchema = new mongoose.Schema({
   },
   subscriptionPlan: {
     type: String,
-    enum: ['FREE_TRIAL', 'BASIC', 'STANDARD', 'PREMIUM'],
+    enum: ['FREE_TRIAL', 'BASIC', 'STANDARD', 'PREMIUM', 'BUSINESS'],
     required: true
   },
   amount: {

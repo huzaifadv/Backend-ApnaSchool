@@ -155,7 +155,7 @@ export const getParentInvoice = async (req, res, next) => {
     const [student, classData, schoolDoc] = await Promise.all([
       Student.findById(payment.studentId).select('fullName rollNumber fatherName motherName monthlyFee').lean(),
       Class.findById(payment.classId).select('className section').lean(),
-      School.findById(req.schoolId).select('schoolName logo').lean()
+      School.findById(req.mainSchoolId || req.schoolId).select('schoolName logo').lean()
     ]);
 
     // Parse invoice metadata from remarks field (legacy support)

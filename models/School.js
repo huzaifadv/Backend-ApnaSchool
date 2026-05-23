@@ -66,7 +66,7 @@ const schoolSchema = new mongoose.Schema({
   selectedPlan: {
     type: String,
     required: [true, 'Plan selection is required'],
-    enum: ['FREE_TRIAL', 'BASIC', 'STANDARD', 'PREMIUM'],
+    enum: ['FREE_TRIAL', 'BASIC', 'STANDARD', 'PREMIUM', 'BUSINESS'],
     trim: true
   },
   billingCycle: {
@@ -94,7 +94,9 @@ const schoolSchema = new mongoose.Schema({
         case 'STANDARD':
           return 600;
         case 'PREMIUM':
-          return -1; // -1 means unlimited
+          return 1200;
+        case 'BUSINESS':
+          return -1; // -1 means custom/unlimited
         default:
           return 100;
       }
@@ -144,6 +146,31 @@ const schoolSchema = new mongoose.Schema({
   isEmailVerified: {
     type: Boolean,
     default: false
+  },
+  // Admin invite verification (school email OTP)
+  inviteEmailOTP: {
+    type: String
+  },
+  inviteEmailOTPExpires: {
+    type: Date
+  },
+  // Branch upgrade request tracking
+  branchUpgradeStatus: {
+    type: String,
+    enum: ['none', 'pending', 'approved', 'rejected'],
+    default: 'none'
+  },
+  branchUpgradeRequestedAt: {
+    type: Date
+  },
+  branchUpgradeApprovedAt: {
+    type: Date
+  },
+  branchUpgradeRejectedAt: {
+    type: Date
+  },
+  branchUpgradeNotes: {
+    type: String
   },
   // Email Change Fields
   pendingEmail: { type: String },
@@ -263,6 +290,21 @@ const schoolSchema = new mongoose.Schema({
       trim: true
     }
   },
+  // Institution type (set by new registration wizard — optional for legacy schools)
+  institutionType: {
+    type: String,
+    enum: ['academy', 'school', 'college', 'university'],
+    default: null
+  },
+  // Branch structure (set by new registration wizard — optional for legacy schools)
+  branchStructure: {
+    type: String,
+    enum: ['single', 'multiple'],
+    default: null
+  },
+  // Admin contact captured during wizard (no password step)
+  adminName: { type: String, trim: true },
+  adminPhone: { type: String, trim: true },
   // School Logo
   logo: {
     url: {
@@ -301,10 +343,11 @@ schoolSchema.virtual('remainingDays').get(function() {
  */
 schoolSchema.methods.getPlanLimits = function() {
   const limits = {
-    FREE_TRIAL: { students: 100, name: 'Trial', duration: '14 days' },
+    FREE_TRIAL: { students: 100, name: 'Trial', duration: '7 days' },
     BASIC: { students: 300, name: 'Basic', duration: this.billingCycle === 'YEARLY' ? '1 year' : '1 month' },
     STANDARD: { students: 600, name: 'Standard', duration: this.billingCycle === 'YEARLY' ? '1 year' : '1 month' },
-    PREMIUM: { students: -1, name: 'Premium', duration: this.billingCycle === 'YEARLY' ? '1 year' : '1 month' } // -1 = unlimited
+    PREMIUM: { students: 1200, name: 'Premium', duration: this.billingCycle === 'YEARLY' ? '1 year' : '1 month' },
+    BUSINESS: { students: -1, name: 'Business', duration: this.billingCycle === 'YEARLY' ? '1 year' : '1 month' } // -1 = custom/unlimited
   };
 
   return limits[this.selectedPlan] || limits.FREE_TRIAL;
@@ -316,7 +359,7 @@ schoolSchema.methods.getPlanLimits = function() {
 schoolSchema.methods.isStudentLimitReached = async function(currentStudentCount) {
   const limit = this.studentLimit;
 
-  // -1 means unlimited (Premium plan)
+  // -1 means custom/unlimited (Business plan)
   if (limit === -1) return false;
 
   return currentStudentCount >= limit;

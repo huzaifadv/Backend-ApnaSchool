@@ -1179,7 +1179,8 @@ export const markNoticesRead = async (req, res) => {
 
 export const getSchoolInfo = async (req, res) => {
   try {
-    const school = await School.findById(req.schoolId).select("schoolName logo");
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId).select("schoolName logo");
     return res.status(200).json({
       success: true,
       data: {

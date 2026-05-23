@@ -60,6 +60,8 @@ import booksRoutes from './routes/books.js';
 import basketsRoutes from './routes/baskets.js';
 import papersRoutes from './routes/papers.js';
 import syllabusRoutes from './routes/syllabus.js';
+import registrationRoutes from './routes/registrationRoutes.js';
+import branchAccessRoutes from './routes/branchAccessRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import initializeCronJobs from './config/cronJobs.js';
 
@@ -185,6 +187,9 @@ app.use('/api/books', booksRoutes);
 app.use('/api/baskets', basketsRoutes);
 app.use('/api/papers', papersRoutes);
 app.use('/api/syllabus', syllabusRoutes);
+// ── New multi-step registration wizard ────────────────────────────────────────
+app.use('/api/registration', registrationRoutes);
+app.use('/api/admin/branches', branchAccessRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

@@ -1,5 +1,5 @@
 import School from '../models/School.js';
-import { getTenantConnection } from '../config/tenantDB.js';
+import Branch from '../models/Branch.js';
 import { getModel } from '../models/dynamicModels.js';
 
 /**
@@ -44,85 +44,94 @@ export const generateMonthlyFeeRecords = async () => {
       try {
         console.log(`\n📚 Processing school: ${school.schoolName} (ID: ${school._id})`);
 
-        // Get tenant connection and models
-        const Student = await getModel(school._id, 'students');
-        const FeePayment = await getModel(school._id, 'feepayments');
-
-        // Get all active students for this school
-        const students = await Student.find({ isActive: true })
-          .select('_id classId monthlyFee totalMonthlyFee fullName')
+        const branches = await Branch.find({ schoolId: school._id, isActive: true })
+          .select('_id branchName')
           .lean();
 
-        if (!students || students.length === 0) {
-          console.log(`⚠️ No active students found for ${school.schoolName}`);
+        if (!branches.length) {
+          console.log(`⚠️ No active branches found for ${school.schoolName}`);
           continue;
         }
 
-        console.log(`👥 Found ${students.length} active students`);
-
-        // Process each student
-        for (const student of students) {
+        for (const branch of branches) {
           try {
-            // Check if fee record already exists for current month
-            const existingRecord = await FeePayment.findOne({
-              studentId: student._id,
-              month: currentMonth,
-              year: currentYear
-            });
+            console.log(`\n🏢 Processing branch: ${branch.branchName} (ID: ${branch._id})`);
 
-            if (existingRecord) {
-              console.log(`⏭️ Skipping ${student.fullName} - record already exists`);
+            const Student = await getModel(branch._id, 'students');
+            const FeePayment = await getModel(branch._id, 'feepayments');
+
+            const students = await Student.find({ isActive: true })
+              .select('_id classId monthlyFee totalMonthlyFee fullName')
+              .lean();
+
+            if (!students || students.length === 0) {
+              console.log(`⚠️ No active students found for ${branch.branchName}`);
               continue;
             }
 
-            // Get previous month's fee payment to check for remaining balance
-            const previousMonthPayment = await FeePayment.findOne({
-              studentId: student._id,
-              month: previousMonth,
-              year: previousYear
-            });
+            console.log(`👥 Found ${students.length} active students`);
 
-            // Recalculate previous remaining from amount - amountPaid (avoids stale remainingAmount)
-            const previousRemaining = previousMonthPayment
-              ? Math.max(0, (previousMonthPayment.amount || 0) - (previousMonthPayment.amountPaid || 0))
-              : 0;
-            // Use totalMonthlyFee (new structure) with fallback to legacy monthlyFee
-            const currentMonthFee = student.totalMonthlyFee || student.monthlyFee || 0;
-            const totalDue = currentMonthFee + previousRemaining;
+            for (const student of students) {
+              try {
+                const existingRecord = await FeePayment.findOne({
+                  studentId: student._id,
+                  month: currentMonth,
+                  year: currentYear
+                });
 
-            // Create new fee record for current month
-            await FeePayment.create({
-              schoolId: school._id,
-              studentId: student._id,
-              classId: student.classId,
-              month: currentMonth,
-              year: currentYear,
-              amount: totalDue, // Total due (current + previous remaining)
-              amountPaid: 0,
-              remainingAmount: totalDue,
-              partialPayments: [],
-              status: 'Pending',
-              paymentDate: null,
-              remarks: previousRemaining > 0
-                ? `Auto-generated. Includes previous month dues: Rs ${previousRemaining.toLocaleString()}`
-                : 'Auto-generated monthly fee record'
-            });
+                if (existingRecord) {
+                  console.log(`⏭️ Skipping ${student.fullName} - record already exists`);
+                  continue;
+                }
 
-            totalRecordsCreated++;
+                const previousMonthPayment = await FeePayment.findOne({
+                  studentId: student._id,
+                  month: previousMonth,
+                  year: previousYear
+                });
 
-            if (previousRemaining > 0) {
-              console.log(`✅ ${student.fullName}: Rs ${currentMonthFee} + Rs ${previousRemaining} (prev) = Rs ${totalDue}`);
-            } else {
-              console.log(`✅ ${student.fullName}: Rs ${totalDue}`);
+                const previousRemaining = previousMonthPayment
+                  ? Math.max(0, (previousMonthPayment.amount || 0) - (previousMonthPayment.amountPaid || 0))
+                  : 0;
+                const currentMonthFee = student.totalMonthlyFee || student.monthlyFee || 0;
+                const totalDue = currentMonthFee + previousRemaining;
+
+                await FeePayment.create({
+                  schoolId: branch._id,
+                  studentId: student._id,
+                  classId: student.classId,
+                  month: currentMonth,
+                  year: currentYear,
+                  amount: totalDue,
+                  amountPaid: 0,
+                  remainingAmount: totalDue,
+                  partialPayments: [],
+                  status: 'Pending',
+                  paymentDate: null,
+                  remarks: previousRemaining > 0
+                    ? `Auto-generated. Includes previous month dues: Rs ${previousRemaining.toLocaleString()}`
+                    : 'Auto-generated monthly fee record'
+                });
+
+                totalRecordsCreated++;
+
+                if (previousRemaining > 0) {
+                  console.log(`✅ ${student.fullName}: Rs ${currentMonthFee} + Rs ${previousRemaining} (prev) = Rs ${totalDue}`);
+                } else {
+                  console.log(`✅ ${student.fullName}: Rs ${totalDue}`);
+                }
+
+              } catch (studentError) {
+                console.error(`❌ Error processing student ${student.fullName}:`, studentError.message);
+              }
             }
 
-          } catch (studentError) {
-            console.error(`❌ Error processing student ${student.fullName}:`, studentError.message);
+            totalStudentsProcessed += students.length;
+            console.log(`✅ Branch ${branch.branchName} completed: ${students.length} students processed`);
+          } catch (branchError) {
+            console.error(`❌ Error processing branch ${branch.branchName}:`, branchError.message);
           }
         }
-
-        totalStudentsProcessed += students.length;
-        console.log(`✅ School ${school.schoolName} completed: ${students.length} students processed`);
 
       } catch (schoolError) {
         console.error(`❌ Error processing school ${school.schoolName}:`, schoolError.message);

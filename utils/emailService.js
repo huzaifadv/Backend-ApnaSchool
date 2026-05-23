@@ -173,6 +173,48 @@ export const sendSchoolRegistrationOTP = async (email, otp, schoolName) => {
 };
 
 /**
+ * Send admin invite OTP to school email
+ * @param {String} email - School email
+ * @param {String} otp - 6-digit OTP
+ * @param {String} schoolName - School name
+ * @returns {Promise} Send mail promise
+ */
+export const sendAdminInviteOTP = async (email, otp, schoolName) => {
+  const transporter = createTransporter();
+
+  if (!transporter) {
+    console.error('Cannot send admin invite OTP - email service not configured');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Admin Invite Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #2f855a;">Admin Invite Verification</h2>
+        <p>Hello ${schoolName || 'School Admin'},</p>
+        <p>Use this code to authorize an admin invite:</p>
+        <div style="background-color: #f5f5f5; padding: 14px; text-align: center; font-size: 22px; font-weight: bold; letter-spacing: 4px; margin: 18px 0;">
+          ${otp}
+        </div>
+        <p><strong>This code expires in 10 minutes.</strong></p>
+        <p>If you did not request this, you can ignore this email.</p>
+      </div>
+    `
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending admin invite OTP:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Send Password Reset OTP
  * @param {String} email - Recipient email
  * @param {String} otp - 6-digit OTP
@@ -239,6 +281,92 @@ export const sendPasswordResetEmail = async (email, otp, adminName) => {
   }
 };
 
+/**
+ * Send branch admin invite email with verification link
+ * @param {Object} options
+ */
+export const sendBranchAdminInviteEmail = async ({ to, name, branchName, verifyUrl, password }) => {
+  const transporter = createTransporter();
+
+  if (!transporter) {
+    console.error('Cannot send branch admin invite - email service not configured');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const mailOptions = {
+    from: `"Apna School" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: 'Branch Admin Access - Verify Your Email',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+        <div style="background-color: white; padding: 28px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);">
+          <h2 style="color: #2f855a; margin-top: 0;">Branch Admin Access</h2>
+          <p style="color: #333; line-height: 1.6;">Hello ${name},</p>
+          <p style="color: #333; line-height: 1.6;">You have been granted admin access for <strong>${branchName}</strong>.</p>
+          <p style="color: #333; line-height: 1.6;">Please verify your email to activate your account:</p>
+
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${verifyUrl}" style="background: #2f855a; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 6px; display: inline-block;">Verify Email</a>
+          </div>
+
+          <p style="color: #333; line-height: 1.6;">Login credentials:</p>
+          <div style="background: #f1f5f9; padding: 12px 14px; border-radius: 6px;">
+            <p style="margin: 0; color: #111; font-size: 14px;"><strong>Email:</strong> ${to}</p>
+            <p style="margin: 6px 0 0; color: #111; font-size: 14px;"><strong>Password:</strong> ${password}</p>
+          </div>
+
+          <p style="color: #666; font-size: 12px; margin-top: 18px;">This link expires in 24 hours.</p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending branch admin invite:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send branch admin verification success email
+ * @param {Object} options
+ */
+export const sendBranchAdminVerifiedEmail = async ({ to, name, branchName }) => {
+  const transporter = createTransporter();
+
+  if (!transporter) {
+    console.error('Cannot send verification success email - email service not configured');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const mailOptions = {
+    from: `"Apna School" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: 'Branch Admin Access Verified',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+        <div style="background-color: white; padding: 28px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);">
+          <h2 style="color: #2f855a; margin-top: 0;">Email Verified</h2>
+          <p style="color: #333; line-height: 1.6;">Hello ${name},</p>
+          <p style="color: #333; line-height: 1.6;">Your email has been verified and your access for <strong>${branchName}</strong> is now active.</p>
+          <p style="color: #333; line-height: 1.6;">You can now log in to the admin portal.</p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending verification success email:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 export const sendEmailChangeOTP = async (email, otp, schoolName) => {
   const transporter = createTransporter();
   if (!transporter) {
@@ -287,9 +415,38 @@ export const sendEmailChangeOTP = async (email, otp, schoolName) => {
   }
 };
 
+/**
+ * Generic email sender used by registration OTP flow and other ad-hoc emails.
+ * @param {{ to: string, subject: string, html: string }} options
+ */
+export const sendEmail = async ({ to, subject, html }) => {
+  const transporter = createTransporter();
+  if (!transporter) {
+    console.error('Cannot send email - email service not configured');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const mailOptions = {
+    from: `"Apna School" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Email sent to ${to}:`, info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error(`Error sending email to ${to}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   sendVerificationEmail,
   sendSchoolRegistrationOTP,
   sendPasswordResetEmail,
-  sendEmailChangeOTP
+  sendEmailChangeOTP,
+  sendEmail
 };

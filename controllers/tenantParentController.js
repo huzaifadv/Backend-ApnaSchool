@@ -118,7 +118,8 @@ export const getStudentProfile = async (req, res, next) => {
     }
 
     // Get school information from main database
-    const school = await School.findById(req.schoolId)
+    const schoolId = req.mainSchoolId || req.schoolId;
+    const school = await School.findById(schoolId)
       .select('schoolName address city state pincode phone email');
 
     res.status(200).json({
